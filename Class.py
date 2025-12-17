@@ -80,8 +80,7 @@ class Building:
                     self.health = 0
                 return True
             return False
-
-distance 
+ 
 class Enemy:
     def __init__(self, x, y, health=100, damage=10, speed=2, radius=10):
         self.x = x
@@ -291,4 +290,5 @@ class Defender:
                 self.destroyed = True
                 self.health = 0
             return True
+
         return False
