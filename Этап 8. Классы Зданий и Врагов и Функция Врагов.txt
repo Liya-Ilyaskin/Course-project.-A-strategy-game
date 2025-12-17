@@ -1,0 +1,253 @@
+Смотри, у меня есть игра по постройке деревни и при нажатии на кнопку "Следующий уровень", 
+в рандомных местах карты должны генерироваться враги в виде точек(или кружков) и грабить деревню, 
+разрушая постройки. По моей задумке для создания врагов должен создаваться класс Enemy 
+с полями health(здоровье врага)	damage(урон врага) purpose(цель врага). Цель врага - это здание 
+которое он будет выбирать для атаки, путём сканирования месности. 
+также в классе должно создаваться кружок или точка которой будет отображаться враг (что то похожее на pygame.draw.rect). 
+Далее уже будет прописываться функция в которой будет создаваться массив экзэмпляров класса(для нескольких врагов),
+для каждого из которых будет генерироваться разная позиция(например координата х может быть у всех одна, 
+а у генерировться из определённого диапазона). будет реализовывваться сканирование местности для выбора цели
+
+import pygame
+import random
+import math
+
+# Инициализация Pygame
+pygame.init()
+
+# Константы
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+FPS = 60
+
+# Цвета
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+BLACK = (0, 0, 0)
+
+class Building:
+    """Класс для зданий, которые могут быть атакованы"""
+    def __init__(self, x, y, width, height, health=100, color=GREEN):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.health = health
+        self.max_health = health
+        self.color = color
+        self.destroyed = False
+    
+    def take_damage(self, damage):
+        """Получение урона зданием"""
+        if not self.destroyed:
+            self.health -= damage
+            if self.health <= 0:
+                self.destroyed = True
+                self.health = 0
+            return True
+        return False
+    
+    def draw(self, screen):
+        """Отрисовка здания"""
+        if not self.destroyed:
+            pygame.draw.rect(screen, self.color, self.rect)
+            # Отрисовка здоровья
+            health_width = (self.health / self.max_health) * self.rect.width
+            health_rect = pygame.Rect(self.rect.x, self.rect.y - 10, health_width, 5)
+            pygame.draw.rect(screen, RED, health_rect)
+
+class Enemy:
+    """Класс врага с заданными характеристиками"""
+    def __init__(self, x, y, health=100, damage=10, speed=2, radius=10):
+        self.x = x
+        self.y = y
+        self.health = health
+        self.damage = damage
+        self.speed = speed
+        self.radius = radius
+        self.purpose = None  # Целевое здание для атаки
+        self.color = RED
+        self.attack_cooldown = 0
+        self.attack_delay = 60  # Задержка между атаками (в кадрах)
+    
+    def scan_for_target(self, buildings):
+        """Сканирование местности для выбора цели"""
+        if not buildings:
+            return None
+        
+        # Ищем ближайшее неразрушенное здание
+        closest_building = None
+        min_distance = float('inf')
+        
+        for building in buildings:
+            if not building.destroyed:
+                # Вычисляем расстояние до центра здания
+                building_center_x = building.rect.x + building.rect.width // 2
+                building_center_y = building.rect.y + building.rect.height // 2
+                
+                distance = math.sqrt((self.x - building_center_x)**2 + (self.y - building_center_y)**2)
+                
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_building = building
+        
+        return closest_building
+    
+    def move_towards_target(self):
+        """Движение к выбранной цели"""
+        if self.purpose and not self.purpose.destroyed:
+            target_x = self.purpose.rect.x + self.purpose.rect.width // 2
+            target_y = self.purpose.rect.y + self.purpose.rect.height // 2
+            
+            # Вычисляем направление
+            dx = target_x - self.x
+            dy = target_y - self.y
+            distance = math.sqrt(dx**2 + dy**2)
+            
+            if distance > 0:
+                # Нормализуем вектор направления
+                dx /= distance
+                dy /= distance
+                
+                # Двигаемся к цели
+                self.x += dx * self.speed
+                self.y += dy * self.speed
+    
+    def attack(self):
+        """Атака выбранной цели"""
+        if self.purpose and not self.purpose.destroyed and self.attack_cooldown <= 0:
+            # Проверяем, достигли ли мы цели (находимся ли рядом с зданием)
+            target_rect = self.purpose.rect
+            enemy_rect = pygame.Rect(self.x - self.radius, self.y - self.radius, 
+                                   self.radius * 2, self.radius * 2)
+            
+            if enemy_rect.colliderect(target_rect):
+                self.purpose.take_damage(self.damage)
+                self.attack_cooldown = self.attack_delay
+                return True
+        return False
+    
+    def update(self, buildings):
+        """Обновление состояния врага"""
+        # Обновляем кулдаун атаки
+        if self.attack_cooldown > 0:
+            self.attack_cooldown -= 1
+        
+        # Если нет цели или цель разрушена, ищем новую
+        if not self.purpose or self.purpose.destroyed:
+            self.purpose = self.scan_for_target(buildings)
+        
+        # Если есть цель, двигаемся к ней и атакуем
+        if self.purpose and not self.purpose.destroyed:
+            self.move_towards_target()
+            self.attack()
+    
+    def draw(self, screen):
+        """Отрисовка врага в виде кружка"""
+        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+        
+        # Отрисовка здоровья над врагом
+        health_text = f"HP: {self.health}"
+        font = pygame.font.Font(None, 20)
+        text_surface = font.render(health_text, True, WHITE)
+        screen.blit(text_surface, (self.x - 15, self.y - 25))
+
+def spawn_enemies(count, buildings, screen_width=SCREEN_WIDTH, screen_height=SCREEN_HEIGHT):
+    """Создание массива врагов со случайными позициями"""
+    enemies = []
+    
+    for i in range(count):
+        # Генерация случайной позиции (x фиксирован, y случайный)
+        x = 0  # Враги появляются слева
+        y = random.randint(50, screen_height - 50)
+        
+        # Случайные характеристики врага
+        health = random.randint(80, 120)
+        damage = random.randint(8, 15)
+        speed = random.uniform(1.5, 2.5)
+        radius = random.randint(8, 12)
+        
+        enemy = Enemy(x, y, health, damage, speed, radius)
+        enemy.purpose = enemy.scan_for_target(buildings)
+        enemies.append(enemy)
+    
+    return enemies
+
+def next_level(enemies_list, buildings, enemy_count=5):
+    """Функция для перехода на следующий уровень"""
+    enemies_list.clear()  # Очищаем старых врагов
+    new_enemies = spawn_enemies(enemy_count, buildings)
+    enemies_list.extend(new_enemies)
+    
+    # Восстанавливаем здания (опционально)
+    for building in buildings:
+        building.health = building.max_health
+        building.destroyed = False
+    
+    return f"Уровень {len(enemies_list) // 5 + 1} начался! Врагов: {len(enemies_list)}"
+
+# Пример использования в игровом цикле
+def main():
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    pygame.display.set_caption("Война с врагами")
+    clock = pygame.time.Clock()
+    
+    # Создаем здания
+    buildings = [
+        Building(200, 200, 100, 80, 150, BLUE),
+        Building(400, 300, 120, 90, 200, GREEN),
+        Building(600, 150, 80, 100, 120, BLUE)
+    ]
+    
+    # Список врагов
+    enemies = []
+    
+    # Кнопка следующего уровня
+    next_level_button = pygame.Rect(SCREEN_WIDTH - 150, 10, 140, 40)
+    current_level = 1
+    
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if next_level_button.collidepoint(event.pos):
+                    # Нажата кнопка "Следующий уровень"
+                    message = next_level(enemies, buildings, enemy_count=current_level * 2)
+                    current_level += 1
+                    print(message)
+        
+        # Обновление врагов
+        for enemy in enemies[:]:
+            enemy.update(buildings)
+            if enemy.health <= 0:
+                enemies.remove(enemy)
+        
+        # Отрисовка
+        screen.fill(BLACK)
+        
+        # Отрисовка зданий
+        for building in buildings:
+            building.draw(screen)
+        
+        # Отрисовка врагов
+        for enemy in enemies:
+            enemy.draw(screen)
+        
+        # Отрисовка кнопки
+        pygame.draw.rect(screen, GREEN, next_level_button)
+        font = pygame.font.Font(None, 24)
+        button_text = font.render("След. уровень", True, BLACK)
+        screen.blit(button_text, (next_level_button.x + 10, next_level_button.y + 10))
+        
+        # Отображение информации об уровне
+        level_text = font.render(f"Уровень: {current_level}", True, WHITE)
+        screen.blit(level_text, (10, 10))
+        
+        pygame.display.flip()
+        clock.tick(FPS)
+    
+    pygame.quit()
+
+if __name__ == "__main__":
+    main()

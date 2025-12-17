@@ -1,0 +1,206 @@
+добать три переменные значения которых будут отображаться на нижней панели 
+и значить количество золота, зелья, жителей и уровень деревни
+
+import pygame
+import sys
+
+# Инициализация Pygame
+pygame.init()
+
+# Размеры окна
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 800
+
+# Создание окна
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Деревня - Менеджер ресурсов")
+
+# Цвета
+BACKGROUND = (30, 30, 40)  # Темно-синий фон
+DIVIDER_COLOR = (100, 100, 120)  # Цвет разделителей
+LEFT_PANEL_COLOR = (50, 60, 80)  # Цвет левой панели
+RIGHT_PANEL_COLOR = (40, 50, 70)  # Цвет правой панели
+BOTTOM_BAR_COLOR = (60, 70, 90)  # Цвет нижней полоски
+GRID_COLOR = (80, 90, 110)  # Цвет сетки
+
+# Цвета для ресурсов
+GOLD_COLOR = (255, 215, 0)  # Золотой
+POTION_COLOR = (0, 255, 0)   # Зеленый для зелий
+POPULATION_COLOR = (200, 100, 255)  # Фиолетовый для жителей
+LEVEL_COLOR = (255, 100, 100)  # Красный для уровня
+
+# Размеры областей
+BOTTOM_BAR_HEIGHT = 30  # Высота тонкой полоски снизу
+REMAINING_HEIGHT = SCREEN_HEIGHT - BOTTOM_BAR_HEIGHT
+LEFT_PANEL_WIDTH = REMAINING_HEIGHT // 3  # 1/3 оставшейся высоты для ширины левой панели
+RIGHT_PANEL_WIDTH = SCREEN_WIDTH - LEFT_PANEL_WIDTH
+
+# Параметры сетки для правой панели
+GRID_CELL_SIZE = 40  # Размер клетки в пикселях
+
+# Игровые переменные
+gold = 1000          # Количество золота
+potions = 5          # Количество зелий
+population = 42      # Количество жителей
+village_level = 3    # Уровень деревни
+
+# Определение прямоугольников для каждой области
+left_panel_rect = pygame.Rect(0, 0, LEFT_PANEL_WIDTH, REMAINING_HEIGHT)
+right_panel_rect = pygame.Rect(LEFT_PANEL_WIDTH, 0, RIGHT_PANEL_WIDTH, REMAINING_HEIGHT)
+bottom_bar_rect = pygame.Rect(0, REMAINING_HEIGHT, SCREEN_WIDTH, BOTTOM_BAR_HEIGHT)
+
+# Шрифты
+font = pygame.font.Font(None, 36)
+small_font = pygame.font.Font(None, 24)
+
+def draw_grid(surface, rect, cell_size, color):
+    """Отрисовка сетки в указанной области"""
+    start_x = rect.left
+    start_y = rect.top
+    end_x = rect.right
+    end_y = rect.bottom
+    
+    # Вертикальные линии
+    for x in range(start_x, end_x, cell_size):
+        pygame.draw.line(surface, color, (x, start_y), (x, end_y), 1)
+    
+    # Горизонтальные линии
+    for y in range(start_y, end_y, cell_size):
+        pygame.draw.line(surface, color, (start_x, y), (end_x, y), 1)
+
+def draw_resources():
+    """Отрисовка информации о ресурсах на нижней панели"""
+    # Создаем тексты с иконками
+    gold_text = small_font.render(f"💰 Золото: {gold}", True, GOLD_COLOR)
+    potion_text = small_font.render(f"🧪 Зелья: {potions}", True, POTION_COLOR)
+    population_text = small_font.render(f"👥 Жители: {population}", True, POPULATION_COLOR)
+    level_text = small_font.render(f"🏠 Уровень: {village_level}", True, LEVEL_COLOR)
+    
+    # Располагаем тексты равномерно по нижней панели
+    spacing = SCREEN_WIDTH // 5
+    
+    screen.blit(gold_text, (spacing * 1 - 80, REMAINING_HEIGHT + 5))
+    screen.blit(potion_text, (spacing * 2 - 80, REMAINING_HEIGHT + 5))
+    screen.blit(population_text, (spacing * 3 - 80, REMAINING_HEIGHT + 5))
+    screen.blit(level_text, (spacing * 4 - 80, REMAINING_HEIGHT + 5))
+
+def draw_interface():
+    """Отрисовка интерфейса с тремя областями"""
+    # Очистка экрана
+    screen.fill(BACKGROUND)
+    
+    # Отрисовка панелей
+    pygame.draw.rect(screen, LEFT_PANEL_COLOR, left_panel_rect)
+    pygame.draw.rect(screen, RIGHT_PANEL_COLOR, right_panel_rect)
+    pygame.draw.rect(screen, BOTTOM_BAR_COLOR, bottom_bar_rect)
+    
+    # Отрисовка сетки в правой панели
+    draw_grid(screen, right_panel_rect, GRID_CELL_SIZE, GRID_COLOR)
+    
+    # Отрисовка разделителей
+    pygame.draw.line(screen, DIVIDER_COLOR, 
+                    (LEFT_PANEL_WIDTH, 0), 
+                    (LEFT_PANEL_WIDTH, REMAINING_HEIGHT), 2)
+    pygame.draw.line(screen, DIVIDER_COLOR, 
+                    (0, REMAINING_HEIGHT), 
+                    (SCREEN_WIDTH, REMAINING_HEIGHT), 2)
+    
+    # Текст для идентификации областей
+    left_text = font.render("Информация о деревне", True, (255, 255, 255))
+    right_text = font.render("Карта деревни - СЕТКА", True, (255, 255, 255))
+    
+    screen.blit(left_text, (LEFT_PANEL_WIDTH // 6, 30))
+    screen.blit(right_text, (LEFT_PANEL_WIDTH + 50, 30))
+    
+    # Отрисовка ресурсов на нижней панели
+    draw_resources()
+
+def update_resources():
+    """Обновление ресурсов (для демонстрации)"""
+    global gold, potions, population, village_level
+    
+    # Здесь можно добавить логику изменения ресурсов
+    # Например: gold += 1  # Автоматическое увеличение золота
+
+def main():
+    """Главный игровой цикл"""
+    clock = pygame.time.Clock()
+    running = True
+    
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                # Изменение размера сетки
+                elif event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS:
+                    global GRID_CELL_SIZE
+                    GRID_CELL_SIZE = min(100, GRID_CELL_SIZE + 5)
+                elif event.key == pygame.K_MINUS:
+                    GRID_CELL_SIZE = max(10, GRID_CELL_SIZE - 5)
+                
+                # Тестовое изменение ресурсов (для демонстрации)
+                elif event.key == pygame.K_g:
+                    global gold
+                    gold += 100
+                elif event.key == pygame.K_p:
+                    global potions
+                    potions += 1
+                elif event.key == pygame.K_h:
+                    global population
+                    population += 1
+                elif event.key == pygame.K_l:
+                    global village_level
+                    village_level += 1
+        
+        # Обновление ресурсов
+        update_resources()
+        
+        # Отрисовка интерфейса
+        draw_interface()
+        
+        # Отображение размера сетки и подсказок
+        grid_info = font.render(f"Размер клетки: {GRID_CELL_SIZE}px (+/-)", True, (200, 200, 200))
+        help_text = small_font.render("Тест: G-золото, P-зелья, H-жители, L-уровень", True, (150, 150, 150))
+        
+        screen.blit(grid_info, (LEFT_PANEL_WIDTH + 50, 70))
+        screen.blit(help_text, (LEFT_PANEL_WIDTH + 50, 110))
+        
+        # Обновление экрана
+        pygame.display.flip()
+        clock.tick(60)  # 60 FPS
+    
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
+
+Новые возможности:
+📊 Переменные на нижней панели:
+💰 Золото: gold = 1000
+🧪 Зелья: potions = 5
+👥 Жители: population = 42
+🏠 Уровень деревни: village_level = 3
+
+🎮 Управление для тестирования:
+G - добавить 100 золота
+P - добавить 1 зелье
+H - добавить 1 жителя
+L - повысить уровень деревни
++/- - изменить размер сетки
+
+🎨 Визуальные улучшения:
+Цветные иконки для каждого ресурса Х
+Равномерное расположение по нижней панели
+Разные цвета для разных типов ресурсов
+
+🔧 Легко настраивается:
+python
+# Измени начальные значения:
+gold = 5000
+potions = 10
+population = 100
+village_level = 5

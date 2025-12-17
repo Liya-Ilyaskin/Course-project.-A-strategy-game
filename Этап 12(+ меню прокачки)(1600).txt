@@ -1,0 +1,1677 @@
+Файл KYPCACH.py:
+
+import sys
+import time
+import random
+from colors import *
+from Class import *
+from hint import *
+ 
+injll = 0
+
+# Инициализация Pygame
+pygame.init()
+
+# Размеры окна
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 800
+
+# Создание окна
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Деревня - Экономическая стратегия")
+
+# Координаты мыши
+mouse_x, mouse_y = pygame.mouse.get_pos()
+
+# Размеры областей
+BOTTOM_BAR_HEIGHT = 90  # Высота нижней панели
+REMAINING_HEIGHT = SCREEN_HEIGHT - BOTTOM_BAR_HEIGHT
+LEFT_PANEL_WIDTH = REMAINING_HEIGHT // 3  # 1/3 оставшейся высоты для ширины левой панели
+RIGHT_PANEL_WIDTH = SCREEN_WIDTH - LEFT_PANEL_WIDTH
+
+# Параметры сетки для правой панели
+GRID_CELL_SIZE = 40  # Размер клетки в пикселях
+
+# Игровые переменные
+gold = 400                  # Количество золота
+gold_limit = 500            # Лимит золота 
+potions = 400               # Количество зелий
+potions_limit = 500         # Лимит зелья
+population = 10             # Количество жителей
+free_population = 10        # Свободные жители
+village_level = 1           # Уровень деревни
+hint_level = 0
+defenders_village = 0       # Количество не выпущеных защитников
+defenders_village_limit = 0 # Лимит защитников
+last_income_time = time.time()  # Время последнего дохода с шахт
+
+# Переменные для строительства
+selected_building = None    # Выбранное здание для постройки
+buildings = []              # Список построенных зданий
+unique_buildings = {}       # Словарь для сохранения построеных видов зданий
+mines = {}                  # Словарь шахт: {id: {"workers": 0, "last_income": time}}
+potions_maker = {}          # Словарь зельеварок: {id: {"workers": 0, "last_income": time}}
+military_camp = {}          # Словарь военных лагерей {id: {"defenders": 0}}
+defenders = []
+
+# Размеры построек (в клетках)
+BUILDING_SIZES = {
+    "Ратуша": (3, 2),          
+    "Золотохранилище": (2, 2),      
+    "Шахта": (2, 2),                
+    "Зельехранилище": (2, 2),     
+    "Зельеварка": (2, 2),          
+    "Стрелковая башня": (2, 2),
+    "Военный лагерь": (3, 3),
+    "Стена" : (1, 1)
+}
+
+# Стоимость построек (уменьшена)
+BUILDING_COSTS = {
+    "Ратуша": {"gold": 200, "potions": 0},  
+    "Золотохранилище": {"gold": 50, "potions": 0},
+    "Шахта": {"gold": 50, "potions": 0},
+    "Зельехранилище": {"gold": 50, "potions": 0},
+    "Зельеварка": {"gold": 50, "potions": 0},
+    "Стрелковая башня": {"gold": 50, "potions": 0},
+    "Военный лагерь": {"gold": 100, "potions": 0},
+    "Стена" : {"gold": 5, "potions": 0}
+}
+
+BUILDING_LIMITS = {
+    1: {"Ратуша": 1, "Золотохранилище": 2, "Шахта": 2, "Зельехранилище": 2,
+        "Зельеварка": 2, "Стрелковая башня": 4, "Военный лагерь": 2, "Стена": 15},
+    2: {"Ратуша": 1, "Золотохранилище": 3, "Шахта": 3, "Зельехранилище": 3,
+        "Зельеварка": 3, "Стрелковая башня": 5, "Военный лагерь": 3, "Стена": 30},
+    3: {"Ратуша": 1, "Золотохранилище": 4, "Шахта": 4, "Зельехранилище": 4,
+        "Зельеварка": 4, "Стрелковая башня": 6, "Военный лагерь": 4, "Стена": 45},
+    4: {"Ратуша": 1, "Золотохранилище": 5, "Шахта": 5, "Зельехранилище": 5,
+        "Зельеварка": 5, "Стрелковая башня": 7, "Военный лагерь": 5, "Стена": 60},
+    5: {"Ратуша": 1, "Золотохранилище": 6, "Шахта": 6, "Зельехранилище": 6,
+        "Зельеварка": 6, "Стрелковая башня": 8, "Военный лагерь": 6, "Стена": 75}
+}
+
+BUILDING_LEVEL_LIMITS = {
+    1: {"Ратуша": 1, "Золотохранилище": 1, "Шахта": 1, "Зельехранилище": 1,
+        "Зельеварка": 1, "Стрелковая башня": 1, "Военный лагерь": 1, "Стена": 1},
+    2: {"Ратуша": 2, "Золотохранилище": 2, "Шахта": 2, "Зельехранилище": 2,
+        "Зельеварка": 2, "Стрелковая башня": 2, "Военный лагерь": 2, "Стена": 2},
+    3: {"Ратуша": 3, "Золотохранилище": 3, "Шахта": 3, "Зельехранилище": 3,
+        "Зельеварка": 3, "Стрелковая башня": 3, "Военный лагерь": 3, "Стена": 3},
+    4: {"Ратуша": 4, "Золотохранилище": 4, "Шахта": 4, "Зельехранилище": 4,
+        "Зельеварка": 4, "Стрелковая башня": 4, "Военный лагерь": 4, "Стена": 4},
+    5: {"Ратуша": 5, "Золотохранилище": 5, "Шахта": 5, "Зельехранилище": 5,
+        "Зельеварка": 5, "Стрелковая башня": 5, "Военный лагерь": 5, "Стена": 5},
+}
+
+BUILDING_HEALTH = {
+    "Ратуша": 250,
+    "Золотохранилище": 50,  
+    "Шахта": 50,
+    "Зельехранилище": 50,
+    "Зельеварка": 50,
+    "Стрелковая башня": 100,
+    "Военный лагерь": 100,
+    "Стена" : 20
+}
+
+# Стоимость улучшения зданий (добавьте после BUILDING_COSTS)
+UPGRADE_COSTS = {
+    "Золотохранилище": {"gold": 100, "potions": 50},
+    "Шахта": {"gold": 80, "potions": 40},
+    "Зельехранилище": {"gold": 100, "potions": 50},
+    "Зельеварка": {"gold": 80, "potions": 40},
+    "Стрелковая башня": {"gold": 120, "potions": 60},
+    "Военный лагерь": {"gold": 150, "potions": 75},
+    "Стена": {"gold": 20, "potions": 10}
+}
+
+# Множители улучшений для разных типов зданий
+UPGRADE_MULTIPLIERS = {
+    "Золотохранилище": {"capacity": 1.5, "health": 1.2},
+    "Шахта": {"income": 1.5, "health": 1.2},
+    "Зельехранилище": {"capacity": 1.5, "health": 1.2},
+    "Зельеварка": {"income": 1.5, "health": 1.2},
+    "Стрелковая башня": {"damage": 1.5, "range": 1.2, "health": 1.3},
+    "Военный лагерь": {"capacity": 1.5, "health": 1.2},
+    "Стена": {"health": 1.5},
+    "Ратуша": {"health": 1.3}
+}
+
+ENEMY_LEVEL = {
+    1: 10,
+    2: 15,
+    3: 20
+}
+
+# Переменные для меню и др.
+selected_building_id = None  # Выбранная шахта для управления
+menu_visible = [False, None]
+levelup_menu_visible = [False, None]
+building_menu_rect = pygame.Rect(0, 0, 300, 150)
+assign_input_active = False
+assign_input_text = ""
+recall_input_active = False
+recall_input_text = ""
+legend_active = False
+hint_active = True
+current_menu_buttons = {}
+levelup_menu_rect = None
+upgrade_button_rect = None
+cancel_button_rect = None
+
+# Определение прямоугольников для каждой области
+left_panel_rect = pygame.Rect(0, 0, LEFT_PANEL_WIDTH, REMAINING_HEIGHT)
+right_panel_rect = pygame.Rect(LEFT_PANEL_WIDTH, 0, RIGHT_PANEL_WIDTH, REMAINING_HEIGHT)
+bottom_bar_rect = pygame.Rect(0, REMAINING_HEIGHT, SCREEN_WIDTH, BOTTOM_BAR_HEIGHT)
+
+# Кнопки построек в левой панели
+building_buttons = {}
+text_surface = []
+
+# Шрифты
+font = pygame.font.Font(None, 30)
+small_font = pygame.font.Font(None, 24)
+
+# Функция для улучшения здания
+def upgrade_building(building_id):
+    """Улучшает здание на один уровень"""
+    global gold, potions, gold_limit, potions_limit, defenders_village_limit
+    
+    if building_id < 0 or building_id >= len(buildings):
+        return False
+    
+    building = buildings[building_id]
+    
+    # Проверяем максимальный уровень для текущего уровня деревни
+    max_level = BUILDING_LEVEL_LIMITS[village_level][building.name]
+    if building.level >= max_level:
+        return False
+    
+    # Проверяем стоимость улучшения
+    cost = UPGRADE_COSTS[building.name]
+    if gold < cost["gold"] or potions < cost["potions"]:
+        return False
+    
+    # Вычитаем стоимость
+    gold -= cost["gold"]
+    potions -= cost["potions"]
+    
+    # Увеличиваем уровень здания
+    building.level += 1
+    
+    # Увеличиваем здоровье здания в соответствии с множителем
+    if building.name in UPGRADE_MULTIPLIERS and "health" in UPGRADE_MULTIPLIERS[building.name]:
+        health_multiplier = UPGRADE_MULTIPLIERS[building.name]["health"]
+        building.max_health = int(building.max_health * health_multiplier)
+        building.health = building.max_health
+    
+    # Применяем специальные эффекты улучшения для разных типов зданий
+    if building.name == "Золотохранилище":
+        gold_limit += 50  # Увеличиваем лимит золота
+    elif building.name == "Шахта" and building_id in mines:
+        mines[building_id]["level"] = building.level
+    elif building.name == "Зельехранилище":
+        potions_limit += 50  # Увеличиваем лимит зелий
+    elif building.name == "Зельеварка" and building_id in potions_maker:
+        potions_maker[building_id]["level"] = building.level
+    elif building.name == "Военный лагерь":
+        defenders_village_limit += 5  # Увеличиваем лимит защитников
+        if building_id in military_camp:
+            military_camp[building_id]["level"] = building.level
+    
+    return True
+
+def update_building_buttons():
+    """Обновляет кнопки доступных построек"""
+    global building_buttons
+    building_buttons = {}
+    y_offset = 100
+    
+    for building_name in BUILDING_COSTS:
+        current_count = sum(1 for b in buildings if b.name == building_name)
+        if building_name in BUILDING_LIMITS.get(village_level, {}): 
+            if current_count < BUILDING_LIMITS.get(village_level, {}).get(building_name, 0):
+                building_buttons[building_name] = pygame.Rect(20, y_offset, LEFT_PANEL_WIDTH - 40, 60)
+                y_offset += 70
+                
+
+def draw_grid(surface, rect, cell_size, color):
+    """Отрисовка сетки в указанной области"""
+    start_x = rect.left
+    start_y = rect.top
+    end_x = rect.right
+    end_y = rect.bottom
+    
+    # Вертикальные линии
+    for x in range(start_x, end_x, cell_size):
+        pygame.draw.line(surface, color, (x, start_y), (x, end_y), 1)
+    
+    # Горизонтальные линии
+    for y in range(start_y, end_y, cell_size):
+        pygame.draw.line(surface, color, (start_x, y), (end_x, y), 1)
+
+def get_building_color(building_name):
+    """Возвращает цвет здания по его имени"""
+    colors = {
+        "Ратуша": TOWN_HALL_COLOR,
+        "Золотохранилище": STORAGE_GOLD_COLOR,
+        "Шахта": MINE_COLOR,
+        "Зельехранилище": STORAGE_POTION_COLOR,
+        "Зельеварка": POTION_MAKER_COLOR,
+        "Стрелковая башня": SHOOTING_TOWER_COLOR,
+        "Военный лагерь": MILITARY_CAMP_COLOR,
+        "Стена" : WALL_COLOR
+    }
+    return colors.get(building_name, (255, 255, 255))
+
+def get_building_preview_color(building_name):
+    """Возвращает цвет предпросмотра здания"""
+    colors = {
+        "Ратуша": TOWN_HALL_PREVIEW_COLOR,
+        "Золотохранилище": STORAGE_GOLD_PREVIEW_COLOR,
+        "Шахта": MINE_PREVIEW_COLOR,
+        "Зельехранилище": STORAGE_POTION_PREVIEW_COLOR,
+        "Зельеварка": POTION_MAKER_PREVIEW_COLOR,
+        "Стрелковая башня": SHOOTING_TOWER_PREVIEW_COLOR,
+        "Военный лагерь": MILITARY_CAMP_PREVIEW_COLOR,
+        "Стена": WALL_PREVIEW_COLOR
+    }
+    return colors.get(building_name, (255, 255, 255, 128))
+
+def draw_buildings():
+    """Отрисовка всех построенных зданий"""
+    global gold, potions, gold_limit, potions_limit, defenders_village_limit, village_level
+    global hint_level
+
+    for i, building in enumerate(buildings):
+        name, grid_x, grid_y, readiness = building.name, building.rect.x, building.rect.y, building.construction_readiness
+        max_width_ready_line, real_width_ready_line = building.max_time_building, building.timer_building
+        width, height = BUILDING_SIZES[name]
+
+        # Конвертируем координаты сетки в пиксели
+        pixel_x = right_panel_rect.left + grid_x * GRID_CELL_SIZE
+        pixel_y = right_panel_rect.top + grid_y * GRID_CELL_SIZE
+        pixel_width = width * GRID_CELL_SIZE
+        pixel_height = height * GRID_CELL_SIZE
+
+        # Фактическая длинна линии готовности
+        width_ready_line = 1 - real_width_ready_line / max_width_ready_line
+        if real_width_ready_line < max_width_ready_line:
+            building.timer_building += 1
+        if not building.added_an_effect:
+            if(width_ready_line == 0):
+                readiness = True
+                building.construction_readiness = True
+
+                if name == "Ратуша":
+                   hint_level = 1
+
+                # Особые эффекты построек
+                if name == "Золотохранилище":
+                    gold_limit += 50 * BUILDING_LEVEL_LIMITS[village_level][name]
+                elif name == "Шахта":
+                    mine_id = len(buildings) - 1 # Получение ID последней добавленой шахты(-1 потому что отсчёт с 0)
+                    mines[mine_id] = {"workers": 0, "last_income": time.time(), "level": 1}
+                elif name == "Зельехранилище":
+                    potions_limit += 50 * BUILDING_LEVEL_LIMITS[village_level][name]
+                elif name == "Зельеварка":
+                    potions_maker_id = len(buildings) - 1
+                    potions_maker[potions_maker_id] = {"workers": 0, "last_income": time.time(), "level": 1}
+                elif name == "Военный лагерь":
+                    defenders_village_limit += 5 * BUILDING_LEVEL_LIMITS[village_level][name]
+                    military_camp_id = len(buildings) - 1
+                    military_camp[military_camp_id] = {"defenders": 0, "level": 1}
+                building.added_an_effect = True
+            
+        # Отрисовываем здание
+        if not readiness:
+            preview_surface = pygame.Surface((pixel_width, pixel_height), pygame.SRCALPHA)
+            preview_color = get_building_preview_color(name)
+            preview_surface.fill(preview_color)
+            screen.blit(preview_surface, (pixel_x, pixel_y))
+        elif building.destroyed:
+            color = DESTROYED_BUILDING_COLOR
+            pygame.draw.rect(screen, color, (pixel_x, pixel_y, pixel_width, pixel_height))
+        else:
+            color = get_building_color(name)
+            pygame.draw.rect(screen, color, (pixel_x, pixel_y, pixel_width, pixel_height))
+        
+        # Отрисовывем полосу готовности постройки
+        if not readiness:
+            pygame.draw.rect(screen, BLUE, (pixel_x + 10, pixel_y + pixel_height - 20, (pixel_width - 20) * width_ready_line, 10))
+        
+        # Обводка здания (подсветка если выбрано)
+        if ((name == "Шахта" or name == "Зельеварка" or name == "Военный лагерь") and selected_building_id == i and not buildings[selected_building_id].destroyed):
+            pygame.draw.rect(screen, (255, 255, 0), (pixel_x, pixel_y, pixel_width, pixel_height), 3)
+        else:
+            pygame.draw.rect(screen, (200, 200, 200), (pixel_x, pixel_y, pixel_width, pixel_height), 2)
+        
+        if not building.destroyed:
+            # Информация сколько людей работает или защитников назначено        
+            if name == "Шахта":
+                workers_main = mines.get(i, {}).get("workers", 0)
+                workers_text = small_font.render(f"Раб: {workers_main}", True, (0, 0, 0))
+                screen.blit(workers_text, (pixel_x + 20, pixel_y + 35))
+            elif name == "Зельеварка":
+                workers_potion_maker = potions_maker.get(i, {}).get("workers", 0)
+                workers_text = small_font.render(f"Раб: {workers_potion_maker}", True, (0, 0, 0))
+                screen.blit(workers_text, (pixel_x + 20, pixel_y + 35)) 
+            elif name == "Военный лагерь":  
+                defenders_military_camp = military_camp.get(i, {}).get("defenders", 0)
+                defenders_text = small_font.render(f"Защит.: {defenders_military_camp}", True, (0, 0, 0))
+                screen.blit(defenders_text, (pixel_x + 20, pixel_y + 35))
+
+def draw_levelup_menu():
+    """Отрисовка меню улучшения здания"""
+    global levelup_menu_rect
+
+    if levelup_menu_visible[0] and levelup_menu_visible[1] is not None:
+        building_id = levelup_menu_visible[1]
+        building = buildings[building_id]
+        if building.name in UPGRADE_COSTS:
+            # Позиционируем меню
+            pixel_x = right_panel_rect.left + building.rect.x * GRID_CELL_SIZE
+            pixel_y = right_panel_rect.top + building.rect.y * GRID_CELL_SIZE
+            
+            levelup_menu_rect = pygame.Rect(pixel_x + 150, pixel_y + 40, 300, 220)
+            
+            # Ограничиваем, чтобы меню не выходило за экран
+            if levelup_menu_rect.right > SCREEN_WIDTH:
+                levelup_menu_rect.right = SCREEN_WIDTH - 10
+            if levelup_menu_rect.bottom > REMAINING_HEIGHT:
+                levelup_menu_rect.bottom = REMAINING_HEIGHT - 10
+            
+            # Рисуем меню
+            pygame.draw.rect(screen, LEVELUP_MENU_COLOR, levelup_menu_rect, border_radius=8)
+            pygame.draw.rect(screen, DIVIDER_COLOR, levelup_menu_rect, 2, border_radius=8)
+            
+            # Заголовок
+            title_text = font.render(f"Улучшение {building.name}", True, (255, 255, 255))
+            screen.blit(title_text, (levelup_menu_rect.x + 10, levelup_menu_rect.y + 10))
+            
+            # Текущий уровень
+            current_level = building.level
+            max_level = BUILDING_LEVEL_LIMITS[village_level][building.name]
+            level_text = small_font.render(f"Текущий уровень: {current_level}/{max_level}", True, (200, 200, 255))
+            screen.blit(level_text, (levelup_menu_rect.x + 10, levelup_menu_rect.y + 45))
+            
+            # Стоимость улучшения
+            cost = UPGRADE_COSTS[building.name]
+            cost_text = small_font.render(f"Стоимость: {cost['gold']} золота, {cost['potions']} зелий", True, (255, 255, 200))
+            screen.blit(cost_text, (levelup_menu_rect.x + 10, levelup_menu_rect.y + 65))
+            
+            # Бонусы от улучшения
+            bonuses_text = small_font.render("Бонусы при улучшении:", True, (200, 255, 200))
+            screen.blit(bonuses_text, (levelup_menu_rect.x + 10, levelup_menu_rect.y + 85))
+            
+            if building.name in UPGRADE_MULTIPLIERS:
+                y_offset = 110
+                for bonus, multiplier in UPGRADE_MULTIPLIERS[building.name].items():
+                    bonus_percent = int((multiplier - 1) * 100)
+                    bonus_text = small_font.render(f"+{bonus_percent}% к {bonus}", True, (200, 200, 200))
+                    screen.blit(bonus_text, (levelup_menu_rect.x + 20, levelup_menu_rect.y + y_offset))
+                    y_offset += 20
+            
+            # Кнопки
+            global upgrade_button_rect, cancel_button_rect
+            upgrade_button_rect = pygame.Rect(levelup_menu_rect.x + 10, levelup_menu_rect.y + 180, 130, 25)
+            cancel_button_rect = pygame.Rect(levelup_menu_rect.x + 150, levelup_menu_rect.y + 180, 130, 25)
+            
+            # Проверяем, можно ли улучшить
+            can_upgrade = (current_level < max_level and 
+                        gold >= cost["gold"] and 
+                        potions >= cost["potions"])
+            
+            # Цвет кнопки улучшения в зависимости от возможности
+            upgrade_color = UPGRADE_BUTTON_COLOR if can_upgrade else (100, 100, 100)
+            
+            # Кнопка улучшения
+            pygame.draw.rect(screen, upgrade_color, upgrade_button_rect, border_radius=4)
+            upgrade_text = small_font.render("Улучшить", True, (255, 255, 255))
+            screen.blit(upgrade_text, (upgrade_button_rect.x + 40, upgrade_button_rect.y + 5))
+            print(f'function {upgrade_button_rect}')
+            
+            # Кнопка отмены
+            pygame.draw.rect(screen, BUTTON_COLOR, cancel_button_rect, border_radius=4)
+            cancel_text = small_font.render("Отмена", True, (255, 255, 255))
+            screen.blit(cancel_text, (cancel_button_rect.x + 40, cancel_button_rect.y + 5))
+
+def draw_building_preview(mouse_pos):
+    """Отрисовка предпросмотра здания при строительстве"""
+    if selected_building:
+        # Проверяем, что курсор в правой панели
+        if (right_panel_rect.left <= mouse_pos[0] <= right_panel_rect.right and
+            right_panel_rect.top <= mouse_pos[1] <= right_panel_rect.bottom):
+            
+            # Вычисляем координаты сетки
+            grid_x = (mouse_pos[0] - right_panel_rect.left) // GRID_CELL_SIZE
+            grid_y = (mouse_pos[1] - right_panel_rect.top) // GRID_CELL_SIZE
+            
+            width, height = BUILDING_SIZES[selected_building]
+            
+            # Проверяем, что здание помещается в границы
+            if (grid_x + width <= (right_panel_rect.width // GRID_CELL_SIZE) and
+                grid_y + height <= (right_panel_rect.height // GRID_CELL_SIZE)):
+                
+                # Конвертируем координаты сетки в пиксели
+                pixel_x = right_panel_rect.left + grid_x * GRID_CELL_SIZE
+                pixel_y = right_panel_rect.top + grid_y * GRID_CELL_SIZE
+                pixel_width = width * GRID_CELL_SIZE
+                pixel_height = height * GRID_CELL_SIZE
+                
+                # Создаем поверхность с альфа-каналом для полупрозрачности
+                preview_surface = pygame.Surface((pixel_width, pixel_height), pygame.SRCALPHA)
+                preview_color = get_building_preview_color(selected_building)
+                preview_surface.fill(preview_color)
+                screen.blit(preview_surface, (pixel_x, pixel_y))
+                
+                # Обводка предпросмотра
+                pygame.draw.rect(screen, (255, 255, 255, 180), (pixel_x, pixel_y, pixel_width, pixel_height), 2)
+
+def draw_building_buttons():
+    """Отрисовка кнопок построек в левой панели"""
+    title_text = font.render("Доступные постройки", True, (255, 255, 255))
+    screen.blit(title_text, (8, 50))
+    
+    for building_name, button_rect in building_buttons.items():
+        # Определяем цвет кнопки
+        mouse_pos = pygame.mouse.get_pos()
+        if button_rect.collidepoint(mouse_pos):
+            color = BUTTON_HOVER_COLOR
+        else:
+            color = BUTTON_COLOR
+        
+        # Рисуем кнопку
+        pygame.draw.rect(screen, color, button_rect, border_radius=8)
+        pygame.draw.rect(screen, DIVIDER_COLOR, button_rect, 2, border_radius=8)
+        
+        # Текст кнопки
+        cost = BUILDING_COSTS[building_name]
+        
+        button_text = font.render(building_name, True, (255, 255, 255))
+        cost_text = small_font.render(f"Золото: {cost['gold']}", True, (200, 200, 200))
+        
+        screen.blit(button_text, (button_rect.x + 7, button_rect.y + 10))
+        screen.blit(cost_text, (button_rect.x + 20, button_rect.y + 35))
+
+def draw_menu(name_building):
+    """Отрисовка меню управления"""
+    if menu_visible[0] and selected_building_id is not None and not buildings[selected_building_id].destroyed:
+        # Позиционируем меню рядом с выбранной постройкой
+        building_info = buildings[selected_building_id]
+        grid_x, grid_y = building_info.rect.x, building_info.rect.y
+        
+        if building_info.construction_readiness:
+            pixel_x = right_panel_rect.left + grid_x * GRID_CELL_SIZE
+            pixel_y = right_panel_rect.top + grid_y * GRID_CELL_SIZE
+            
+            building_menu_rect.x = pixel_x + 100
+            building_menu_rect.y = pixel_y
+            
+            if name_building == 'Военный лагерь':
+                building_menu_rect.height = 190
+            elif name_building in ['Зельеварка', 'Шахта']:
+                building_menu_rect.height = 210
+            elif name_building in ['Стена', 'Зельехранилище', 'Золотохранилище', 'Стрелковая башня']:
+                building_menu_rect.height = 160
+            else:
+                building_menu_rect.height = 120
+
+
+            # Ограничиваем, чтобы меню не выходило за экран
+            if building_menu_rect.right > SCREEN_WIDTH:
+                building_menu_rect.right = SCREEN_WIDTH - 10
+            if building_menu_rect.bottom > REMAINING_HEIGHT:
+                building_menu_rect.bottom = REMAINING_HEIGHT - 10
+            
+            # Рисуем меню
+            pygame.draw.rect(screen, MENU_COLOR, building_menu_rect, border_radius=8)
+            pygame.draw.rect(screen, DIVIDER_COLOR, building_menu_rect, 2, border_radius=8)
+            
+            # Получаем информацию о здании
+            if name_building == "Шахта":
+                workers = mines.get(selected_building_id, {}).get("workers", 0)
+                level = mines.get(selected_building_id, {}).get("level", 1)
+                income_per_worker = 1 * level
+                stats = [
+                    f"Уровень: {level}",
+                    f"Рабочих: {workers}",
+                    f"Доход: {workers * income_per_worker} золота/5сек"
+                ]
+            elif name_building == "Зельеварка":
+                workers = potions_maker.get(selected_building_id, {}).get("workers", 0)
+                level = potions_maker.get(selected_building_id, {}).get("level", 1)
+                potions_per_worker = 1 * level
+                stats = [
+                    f"Уровень: {level}",
+                    f"Рабочих: {workers}",
+                    f"Производит: {workers * potions_per_worker} зелий/5сек"
+                ]
+            elif name_building == "Военный лагерь":
+                defenders_count = military_camp.get(selected_building_id, {}).get("defenders", 0)
+                level = military_camp.get(selected_building_id, {}).get("level", 1)
+                stats = [
+                    f"Уровень: {level}",
+                    f"Защитников: {defenders_count}"
+                ]
+            elif name_building == "Ратуша":
+                level = buildings[selected_building_id].level
+                stats = [
+                    f"Уровень: {level}",
+                    f"Здоровье: {buildings[selected_building_id].health}/{buildings[selected_building_id].max_health}"
+                ]
+            else:
+                level = buildings[selected_building_id].level
+                stats = [
+                    f"Уровень: {level}",
+                    f"Здоровье: {buildings[selected_building_id].health}/{buildings[selected_building_id].max_health}"
+                ]
+
+            # Заголовок меню
+            title_text = font.render(f"Меню: {name_building}", True, (255, 255, 255))
+            screen.blit(title_text, (building_menu_rect.x + 10, building_menu_rect.y + 10))
+            
+            # Отображаем статистику
+            y_offset = 40
+            for stat in stats:
+                stat_text = small_font.render(stat, True, (200, 220, 240))
+                screen.blit(stat_text, (building_menu_rect.x + 10, building_menu_rect.y + y_offset))
+                y_offset += 20
+            
+            y_offset += 10
+            
+            # Кнопки назначения/отзыва только для определенных зданий
+            assign_rect = None
+            recall_rect = None
+            
+            if name_building in ["Шахта", "Зельеварка", "Военный лагерь"]:
+                assign_rect = pygame.Rect(building_menu_rect.x + 10, building_menu_rect.y + y_offset, 130, 25)
+                if name_building in ["Шахта", "Зельеварка"]:
+                    recall_rect = pygame.Rect(building_menu_rect.x + 150, building_menu_rect.y + y_offset, 130, 25)
+                y_offset += 30
+            
+            # Кнопка улучшения для ВСЕХ зданий с улучшениями
+            upgrade_rect = None
+            close_rect = None
+            
+            if name_building in ["Золотохранилище", "Шахта", "Зельехранилище", 
+                                "Зельеварка", "Стрелковая башня", "Военный лагерь", 
+                                "Стена"]:
+                upgrade_rect = pygame.Rect(building_menu_rect.x + 10, building_menu_rect.y + y_offset, 130, 25)
+                y_offset += 30
+            
+            # Кнопка закрытия
+            close_rect = pygame.Rect(building_menu_rect.x + 10, building_menu_rect.y + y_offset, 270, 25)
+            
+            # Отрисовываем кнопки (только если они существуют)
+            if assign_rect:
+                assign_color = BUTTON_HOVER_COLOR if assign_input_active else BUTTON_COLOR     
+                pygame.draw.rect(screen, assign_color, assign_rect, border_radius=4)
+                if name_building in ["Шахта", "Зельеварка"]:
+                    assign_text = small_font.render(f"Назначить: {assign_input_text}", True, (255, 255, 255))
+                elif name_building == "Военный лагерь":
+                    assign_text = small_font.render(f"Нанять: {assign_input_text}", True, (255, 255, 255))
+                screen.blit(assign_text, (assign_rect.x + 5, assign_rect.y + 5))
+            
+            if recall_rect:
+                recall_color = BUTTON_HOVER_COLOR if recall_input_active else BUTTON_COLOR
+                pygame.draw.rect(screen, recall_color, recall_rect, border_radius=4)
+                recall_text = small_font.render(f"Отозвать: {recall_input_text}", True, (255, 255, 255))
+                screen.blit(recall_text, (recall_rect.x + 5, recall_rect.y + 5))
+            
+            if upgrade_rect:
+                pygame.draw.rect(screen, UPGRADE_BUTTON_COLOR, upgrade_rect, border_radius=4)
+                upgrade_text = small_font.render("Улучшить", True, (255, 255, 255))
+                screen.blit(upgrade_text, (upgrade_rect.x + 40, upgrade_rect.y + 5))
+            
+            if close_rect:
+                pygame.draw.rect(screen, BUTTON_COLOR, close_rect, border_radius=4)
+                close_text = small_font.render("Закрыть", True, (255, 255, 255))
+                screen.blit(close_text, (close_rect.x + 100, close_rect.y + 5))
+
+def draw_resources():
+    """Отрисовка информации о ресурсах на нижней панели"""
+    # Создаем тексты с иконками
+    gold_text = font.render(f"Золото: {gold}/{gold_limit}", True, GOLD_COLOR)
+    potion_text = font.render(f"Зелья: {potions}/{potions_limit}", True, POTION_COLOR)
+    population_text = font.render(f"Жители: {free_population}/{population}", True, POPULATION_COLOR)
+    level_text = font.render(f"Уровень: {village_level}", True, LEVEL_COLOR)
+    
+    # Располагаем тексты равномерно по нижней панели
+    spacing = SCREEN_WIDTH // 5
+    
+    screen.blit(gold_text, (spacing * 1 - 120, REMAINING_HEIGHT + 15))
+    screen.blit(potion_text, (spacing * 2 - 120, REMAINING_HEIGHT + 15))
+    screen.blit(population_text, (spacing * 3 - 120, REMAINING_HEIGHT + 15))
+    screen.blit(level_text, (spacing * 4 - 100, REMAINING_HEIGHT + 15))
+    
+    # Информация о текущем режиме
+    if selected_building:
+        mode_text = font.render(f"Режим строительства: {selected_building}", True, (255, 255, 0))
+        screen.blit(mode_text, (50, REMAINING_HEIGHT + 55))
+        help_text = small_font.render("Кликните на карте для постройки | ESC для отмены", True, (200, 200, 200))
+        screen.blit(help_text, (50, REMAINING_HEIGHT + 85))
+    elif menu_visible[0] and not buildings[selected_building_id].destroyed:
+        mode_text = font.render("Режим управления шахтой", True, (255, 255, 0))
+        screen.blit(mode_text, (50, REMAINING_HEIGHT + 55))
+        help_text = small_font.render("Введите количество и нажмите кнопку", True, (200, 200, 200))
+        screen.blit(help_text, (50, REMAINING_HEIGHT + 85))
+
+def can_afford_building(building_name):
+    """Проверяет, хватает ли ресурсов для постройки"""
+    cost = BUILDING_COSTS[building_name]
+    return gold >= cost["gold"] and potions >= cost["potions"]
+
+def is_building_collision(grid_x, grid_y, width, height):
+    """Проверяет, пересекается ли новое здание с существующими"""
+    for building in buildings:
+        name, b_grid_x, b_grid_y = building.name, building.rect.x, building.rect.y
+        b_width, b_height = BUILDING_SIZES[name]
+        
+        # Проверяем пересечение по осям X и Y
+        if (grid_x < b_grid_x + b_width and 
+            grid_x + width > b_grid_x and 
+            grid_y < b_grid_y + b_height and 
+            grid_y + height > b_grid_y):
+            return True
+    return False
+
+def build_building(building_name, grid_x, grid_y):
+    """Строит здание в указанных координатах сетки"""
+    global gold, potions, gold_limit, potions_limit
+    width, height = BUILDING_SIZES[building_name]
+
+    if can_afford_building(building_name) and not is_building_collision(grid_x, grid_y, width, height):
+        cost = BUILDING_COSTS[building_name]
+        gold -= cost["gold"]
+        potions -= cost["potions"]
+        
+        buildings.append(Building(grid_x, grid_y, width, height, BUILDING_HEALTH[building_name], get_building_color(building_name), building_name))
+        
+        # Обновляем кнопки (ратуша исчезнет после постройки)
+        update_building_buttons()
+        
+        return True
+    return False
+
+def process_mine_income(name_building):
+    """Обрабатывает доход от построек с учетом уровня"""
+    global gold, potions, last_income_time
+    
+    current_time = time.time()
+    if current_time - last_income_time >= 5:  # Каждые 5 секунд
+        total_income = 0
+        
+        if name_building == "Шахта":
+            for mine_id, mine_data in mines.items():
+                workers = mine_data.get("workers", 0)
+                level = mine_data.get("level", 1)
+                total_income += workers * level  # Учитываем множитель уровня
+            
+            if total_income > 0:
+                actual_income = min(total_income, gold_limit - gold)
+                if actual_income > 0:
+                    gold += actual_income
+                    
+        elif name_building == "Зельеварка":
+            for potions_maker_id, potions_maker_data in potions_maker.items():
+                workers = potions_maker_data.get("workers", 0)
+                level = potions_maker_data.get("level", 1)
+                total_income += workers * level  # Учитываем множитель уровня
+            
+            if total_income > 0:
+                actual_income = min(total_income, potions_limit - potions)
+                if actual_income > 0:
+                    potions += actual_income
+        
+        last_income_time = current_time
+
+def assign_workers_to_mine(building_id, count, name_building):
+    """Назначает рабочих/нанимает защитников"""
+    global free_population, potions, defenders_village, defenders_village_limit
+    if name_building == "Шахта":
+        if building_id in mines and count > 0 and count <= free_population:
+            mines[building_id]["workers"] += count
+            free_population -= count
+            return True
+        return False
+    elif name_building == "Зельеварка":
+        if building_id in potions_maker and count > 0 and count <= free_population:
+            potions_maker[building_id]["workers"] += count
+            free_population -= count
+            return True
+        return False
+    elif name_building == "Военный лагерь":
+        if (building_id in military_camp and count > 0 and 
+            defenders_village + count <= defenders_village_limit and
+            count * 10 <= potions):
+            military_camp[building_id]["defenders"] += count
+            defenders_village += count
+            potions -= count * 10
+            return True
+        return False
+
+def recall_workers_from_mine(building_id, count, name_building):
+    """Отзывает рабочих из шахты"""
+    global free_population
+    if name_building == "Шахта":
+        if building_id in mines:
+            current_workers = mines[building_id].get("workers", 0)
+            actual_count = min(count, current_workers)
+            if actual_count > 0:
+                mines[building_id]["workers"] -= actual_count
+                free_population += actual_count
+                return True
+        return False
+    elif name_building == "Зельеварка":
+        if building_id in potions_maker:
+            current_workers = potions_maker[building_id].get("workers", 0)
+            actual_count = min(count, current_workers)
+            if actual_count > 0:
+                potions_maker[building_id]["workers"] -= actual_count
+                free_population += actual_count
+                return True
+        return False
+    
+def update_level():
+    global defenders, defenders_village, village_level
+    
+    town_hall_exists = False
+    for building in buildings:
+        if building.name == "Ратуша" and building.health > 0 and not building.destroyed:
+            town_hall_exists = True
+            # Автоматическое улучшение Ратуши при повышении уровня деревни
+            if building.level < BUILDING_LEVEL_LIMITS[village_level]["Ратуша"]:
+                building.level += 1
+                # Увеличиваем здоровье
+                if "health" in UPGRADE_MULTIPLIERS["Ратуша"]:
+                    health_multiplier = UPGRADE_MULTIPLIERS["Ратуша"]["health"]
+                    building.max_health = int(building.max_health * health_multiplier)
+                    building.health = building.max_health
+            break
+    
+    if town_hall_exists:
+        for building in buildings:
+            building.destroyed = False
+            building.health = building.max_health
+        
+        defenders_village = len(defenders)
+        
+        if military_camp:
+            defenders_per_camp = defenders_village // len(military_camp)
+            remainder = defenders_village % len(military_camp)
+            
+            camp_ids = list(military_camp.keys())
+            for i, camp_id in enumerate(camp_ids):
+                defenders_count = defenders_per_camp + (1 if i < remainder else 0)
+                military_camp[camp_id]["defenders"] = defenders_count
+
+        defenders.clear()
+        return True
+    return False
+
+def draw_legend():
+    if legend_active:
+        legend_rect = pygame.Rect(0, 0, LEFT_PANEL_WIDTH, REMAINING_HEIGHT)
+        pygame.draw.rect(screen, LEGEND_PANEL_COLOR, legend_rect)
+ 
+        legend_text = font.render("Легенда", True, (255, 255, 255))
+        screen.blit(legend_text, (70, 50))
+
+        for building in buildings:
+            if building.name not in unique_buildings:
+                unique_buildings[building.name] = building.color
+
+        y_offset = 80
+        for name, color in unique_buildings.items():
+            build_color_text = pygame.Rect(25, y_offset, 20, 20)
+            pygame.draw.rect(screen, color, build_color_text)
+            pygame.draw.rect(screen, DIVIDER_COLOR, build_color_text, 2)
+            
+            build_legend_text = font.render(name, True, (255, 255, 255))
+            screen.blit(build_legend_text, (65, y_offset))
+            
+            y_offset += 35
+
+def draw_multiline_text(screen, text, font, color, x, y, line_height):
+    global hint_level
+    current_y = y
+    
+    for level in range(hint_level + 1):
+        if level in text:
+            level_text = text[level]
+            lines = level_text.split('\n')
+            
+            for line in lines:
+                line_surface = font.render(line, True, color)
+                screen.blit(line_surface, (x, current_y))
+                current_y += line_height
+            
+            current_y += line_height // 2
+
+def draw_hint():
+    if hint_active:
+        hint_rect = pygame.Rect(100, 30, SCREEN_WIDTH - 200, SCREEN_HEIGHT - 60)
+        pygame.draw.rect(screen, HINT_PANEL_COLOR, hint_rect, border_radius=8)
+        pygame.draw.rect(screen, DIVIDER_COLOR, hint_rect, 2, border_radius=8)
+        
+        hint_text = font.render("Подсказка", True, (255, 255, 255)) 
+        screen.blit(hint_text, (hint_rect.x + 450, hint_rect.y + 40))
+        draw_multiline_text(screen, text, font, (255, 255, 255), hint_rect.x + 30, hint_rect.y + 90, 30)
+
+def draw_interface():
+    """Отрисовка интерфейса с тремя областями"""
+    # Очистка экрана
+    screen.fill(BACKGROUND)
+    
+    # Отрисовка панелей
+    pygame.draw.rect(screen, LEFT_PANEL_COLOR, left_panel_rect)
+    pygame.draw.rect(screen, RIGHT_PANEL_COLOR, right_panel_rect)
+    pygame.draw.rect(screen, BOTTOM_BAR_COLOR, bottom_bar_rect)
+    
+    # Отрисовка сетки в правой панели
+    draw_grid(screen, right_panel_rect, GRID_CELL_SIZE, GRID_COLOR)
+    
+    # Отрисовка построек
+    draw_buildings()
+
+    if village_level == 1:
+        update_building_buttons()
+    
+    # Отрисовка кнопок построек
+    draw_building_buttons()
+    
+    # Отрисовка предпросмотра здания
+    draw_building_preview(pygame.mouse.get_pos())
+    
+    # Отрисовка меню шахты
+    if menu_visible[0]:
+        draw_menu(menu_visible[1])
+
+    draw_levelup_menu()
+    
+    # Отрисовка разделителей
+    pygame.draw.line(screen, DIVIDER_COLOR, 
+                    (LEFT_PANEL_WIDTH, 0), 
+                    (LEFT_PANEL_WIDTH, REMAINING_HEIGHT), 3)
+    pygame.draw.line(screen, DIVIDER_COLOR, 
+                    (0, REMAINING_HEIGHT), 
+                    (SCREEN_WIDTH, REMAINING_HEIGHT), 3)
+    
+    # Отображение информации
+    grid_info = font.render(f"Размер клетки: {GRID_CELL_SIZE}px", True, (200, 200, 200))
+    help_text = small_font.render("Тест: G-золото, P-зелья, H-жители, L-уровень, ESC-отмена", True, (150, 150, 150))
+    screen.blit(grid_info, (LEFT_PANEL_WIDTH + 50, 70))
+    screen.blit(help_text, (LEFT_PANEL_WIDTH + 50, 110))
+    
+    # Отрисовка ресурсов на нижней панели
+    draw_resources()
+    
+    if legend_active:
+        draw_legend()
+
+    # Отрисовка кнопки "Следующий уровень"
+    ready_rect = pygame.Rect(SCREEN_WIDTH - 180, SCREEN_HEIGHT - 80, 150, 60)
+    pygame.draw.rect(screen, READY_BUTTON_COLOR, ready_rect, border_radius=4)
+    ready_button_text_1 = font.render(f"Cледующий", True, (255, 255, 255))
+    ready_button_text_2 = font.render(f"уровень", True, (255, 255, 255))
+    screen.blit(ready_button_text_1, (ready_rect.x + 12, ready_rect.y + 5))
+    screen.blit(ready_button_text_2, (ready_rect.x + 35, ready_rect.y + 30))
+
+    # Отрисовка кнопки "Легенда"
+    legend_button_rect = pygame.Rect(SCREEN_WIDTH - 180, 25 , 100, 30)
+    pygame.draw.rect(screen, LEGEND_BUTTON_COLOR, legend_button_rect, border_radius=4)
+    legend_button_text = font.render("Легенда", True, (255, 255, 255))
+    screen.blit(legend_button_text, (legend_button_rect.x + 8, legend_button_rect.y + 7))  
+
+    if hint_active:
+        draw_hint() 
+
+    # Отрисовка кнопки подсказки "?"
+    hint_button_rect = pygame.Rect(SCREEN_WIDTH - 60, 25, 30, 30)
+    pygame.draw.rect(screen, HINT_BUTTON_COLOR, hint_button_rect, border_radius=4)
+    hint_buttun_text = font.render("?", True, (255, 255, 255))
+    screen.blit(hint_buttun_text, (hint_button_rect.x + 9, hint_button_rect.y + 7))
+
+def spawn_enemies(count, buildings, defenders, screen_width=SCREEN_WIDTH, screen_height=SCREEN_HEIGHT):
+    """Создание массива врагов со случайными позициями"""
+    enemies = []
+    
+    for i in range(count):
+        # Генерация случайной позиции (x фиксирован, y случайный)
+        x = 400  # Враги появляются слева
+        y = random.randint(10, screen_height - 10)
+        
+        # Случайные характеристики врага
+        health = random.randint(150, 180)
+        damage = random.randint(10, 15)
+        speed = random.uniform(1.5, 2.5)
+        radius = random.randint(8, 12)
+        
+        enemy = Enemy(x, y - 40, health, damage, speed, radius)
+        enemy.purpose = enemy.scan_for_target(buildings, defenders, right_panel_rect, GRID_CELL_SIZE)
+        enemies.append(enemy)
+    return enemies
+
+def creat_defender(x, y, enemies):
+    defender = Defender(x, y, 70, 70, 3, 10)
+    defender.purpose = defender.scan_for_target(enemies, right_panel_rect, GRID_CELL_SIZE)
+    defenders.append(defender)
+
+    for camp_id in military_camp:
+        if military_camp[camp_id]["defenders"] > 0:
+            military_camp[camp_id]["defenders"] -= 1
+            break
+
+def main():
+    """Главный игровой цикл"""
+    clock = pygame.time.Clock()
+    running = True
+    global selected_building, selected_building_id, menu_visible
+    global assign_input_active, assign_input_text, recall_input_active, recall_input_text, defenders_village
+    global legend_active, hint_active, village_level
+    global levelup_menu_visible, levelup_menu_rect, upgrade_button_rect, cancel_button_rect
+
+    # Инициализация кнопок построек
+    update_building_buttons()
+    enemies = []
+    wave_active = False # Флаг активной волны врагов
+    
+    while running:
+        for event in pygame.event.get():
+            # print(event.dict)
+            # Для отладки
+
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    if menu_visible[0]:
+                        menu_visible[0] = False
+                        assign_input_active = False
+                        recall_input_active = False
+                        assign_input_text = ""
+                        recall_input_text = ""
+                    else:
+                        selected_building = None  # Отмена строительства
+
+                    if hint_active == True:
+                        hint_active = False
+
+                elif event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS:
+                    global GRID_CELL_SIZE
+                    GRID_CELL_SIZE = min(100, GRID_CELL_SIZE + 5)
+                elif event.key == pygame.K_MINUS:
+                    GRID_CELL_SIZE = max(10, GRID_CELL_SIZE - 5)
+                # Обработка ввода текста для меню шахты
+                elif menu_visible[0]:
+                    if assign_input_active:
+                        if event.key == pygame.K_RETURN:
+                            try:
+                                count = int(assign_input_text)
+                                assign_workers_to_mine(selected_building_id, count, menu_visible[1])
+                                assign_input_text = ""
+                            except ValueError:
+                                pass
+                        elif event.key == pygame.K_BACKSPACE:
+                            assign_input_text = assign_input_text[:-1]
+                        elif event.unicode.isdigit():
+                            assign_input_text += event.unicode
+                    
+                    elif recall_input_active:
+                        if event.key == pygame.K_RETURN:
+                            try:
+                                count = int(recall_input_text)
+                                recall_workers_from_mine(selected_building_id, count, menu_visible[1])
+                                recall_input_text = ""
+                            except ValueError:
+                                pass
+                        elif event.key == pygame.K_BACKSPACE:
+                            recall_input_text = recall_input_text[:-1]
+                        elif event.unicode.isdigit():
+                            recall_input_text += event.unicode
+                
+                # Тестовое изменение ресурсов
+                elif not menu_visible[0]:
+                    if event.key == pygame.K_g:
+                        global gold
+                        gold = min(gold + 100, gold_limit)
+                    elif event.key == pygame.K_p:
+                        global potions
+                        potions = min(potions + 100, potions_limit)
+                    elif event.key == pygame.K_h:
+                        global population, free_population
+                        population += 1
+                        free_population += 1
+                    elif event.key == pygame.K_l:
+                        village_level += 1
+            
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_pos = pygame.mouse.get_pos()
+                if event.dict['button'] == 1:
+                    if wave_active and right_panel_rect.collidepoint(mouse_pos):
+                        if defenders_village > 0:
+                            creat_defender(mouse_pos[0], mouse_pos[1], enemies)
+                            defenders_village -= 1
+
+                    if menu_visible[0]:
+                        # Создаем переменную для текущего имени здания
+                        current_building_name = menu_visible[1]
+                        
+                        # ОПРЕДЕЛЯЕМ, МОЖНО ЛИ УЛУЧШИТЬ ДАННОЕ ЗДАНИЕ
+                        can_be_upgraded = current_building_name in ["Золотохранилище", "Шахта", "Зельехранилище", 
+                                                                "Зельеварка", "Стрелковая башня", "Военный лагерь", 
+                                                                "Стена"]
+                        # Определяем прямоугольники динамически
+                        if menu_visible[1] in ["Шахта", "Зельеварка"]:
+                            y_offset = 85 + 25
+                        else:
+                            y_offset = 85
+
+                        # Только для зданий с рабочими/защитниками
+                        if current_building_name in ["Шахта", "Зельеварка", "Военный лагерь"]:
+                            assign_rect = pygame.Rect(building_menu_rect.x + 10, building_menu_rect.y + y_offset, 130, 25)
+                            if current_building_name in ["Шахта", "Зельеварка"]:
+                                recall_rect = pygame.Rect(building_menu_rect.x + 150, building_menu_rect.y + y_offset, 130, 25)
+                            y_offset += 30
+                        
+                        # Для всех зданий, которые можно улучшать
+                        if can_be_upgraded:
+                            upgrade_rect = pygame.Rect(building_menu_rect.x + 10, building_menu_rect.y + y_offset, 130, 25)
+                            y_offset += 30
+                            
+                        # Кнопка закрытия (всегда есть)
+                        close_rect = pygame.Rect(building_menu_rect.x + 10, building_menu_rect.y + y_offset, 270, 25)
+                        
+                        # Обработка кликов
+                        if current_building_name in ["Шахта", "Зельеварка", "Военный лагерь"]:
+                            if assign_rect.collidepoint(mouse_pos):
+                                assign_input_active = True
+                                recall_input_active = False
+                            elif current_building_name in ["Шахта", "Зельеварка"] and recall_rect.collidepoint(mouse_pos):
+                                recall_input_active = True
+                                assign_input_active = False
+                        
+                        # Обработка клика по кнопке улучшения (если она существует)
+                        if can_be_upgraded and upgrade_rect.collidepoint(mouse_pos):
+                            levelup_menu_visible = [True, selected_building_id]
+                            menu_visible = [False, None]
+                            assign_input_active = False
+                            recall_input_active = False
+                            assign_input_text = ""
+                            recall_input_text = ""
+                        
+                        # Обработка клика по кнопке закрытия
+                        if close_rect.collidepoint(mouse_pos):
+                            menu_visible[0] = False
+                            assign_input_active = False
+                            recall_input_active = False
+                            assign_input_text = ""
+                            recall_input_text = ""
+
+                    elif levelup_menu_visible[0]:
+                        # Обработка кликов в меню улучшения
+                        if 'upgrade_button_rect' in globals() and upgrade_button_rect.collidepoint(mouse_pos):
+                            building_id = levelup_menu_visible[1]
+                            if upgrade_building(building_id):
+                                levelup_menu_visible = [False, None]
+                                # Очищаем глобальные переменные
+                                if 'upgrade_button_rect' in globals():
+                                    del upgrade_button_rect
+                                if 'cancel_button_rect' in globals():
+                                    del cancel_button_rect
+                        elif 'cancel_button_rect' in globals() and cancel_button_rect.collidepoint(mouse_pos):
+                            levelup_menu_visible = [False, None]
+                            # Очищаем глобальные переменные
+                            if 'upgrade_button_rect' in globals():
+                                del upgrade_button_rect
+                            if 'cancel_button_rect' in globals():
+                                del cancel_button_rect
+                        else:
+                            # Клик вне меню - закрываем его
+                            levelup_menu_visible = [False, None]
+                            if 'upgrade_button_rect' in globals():
+                                del upgrade_button_rect
+                            if 'cancel_button_rect' in globals():
+                                del cancel_button_rect
+                    else:
+                        ready_rect = pygame.Rect(SCREEN_WIDTH - 180, SCREEN_HEIGHT - 80, 150, 60)
+                        legend_button_rect = pygame.Rect(SCREEN_WIDTH - 180, 25 , 100, 30)
+                        hint_button_rect = pygame.Rect(SCREEN_WIDTH - 60, 25, 30, 30)
+
+                        # Клик в левой панели - выбор здания
+                        if left_panel_rect.collidepoint(mouse_pos):
+                            for building_name, button_rect in building_buttons.items():
+                                if button_rect.collidepoint(mouse_pos) and can_afford_building(building_name):
+                                    selected_building = building_name
+                        # Клик в правой панели
+                        elif right_panel_rect.collidepoint(mouse_pos):
+                            if selected_building:
+                                # Режим строительства
+                                grid_x = (mouse_pos[0] - right_panel_rect.left) // GRID_CELL_SIZE
+                                grid_y = (mouse_pos[1] - right_panel_rect.top) // GRID_CELL_SIZE
+                                
+                                width, height = BUILDING_SIZES[selected_building]
+                                
+                                # Проверяем, что здание помещается
+                                if (grid_x + width <= (right_panel_rect.width // GRID_CELL_SIZE) and
+                                    grid_y + height <= (right_panel_rect.height // GRID_CELL_SIZE)):
+                                    
+                                    if build_building(selected_building, grid_x, grid_y):
+                                        selected_building = None  # Сброс после успешной постройки
+                            else:
+                                # Режим выбора шахты для управления
+                                grid_x = (mouse_pos[0] - right_panel_rect.left) // GRID_CELL_SIZE
+                                grid_y = (mouse_pos[1] - right_panel_rect.top) // GRID_CELL_SIZE
+                                
+                                # Ищем шахту/зельеварку по координатам
+                                for i, building in enumerate(buildings):
+                                    name, b_grid_x, b_grid_y = building.name, building.rect.x, building.rect.y
+                                    width, height = BUILDING_SIZES[name]
+                                    
+                                    if (b_grid_x <= grid_x < b_grid_x + width and
+                                        b_grid_y <= grid_y < b_grid_y + height):
+                                        
+                                        selected_building_id = i
+                                        menu_visible[0] = True
+                                        menu_visible[1] = name
+                                        assign_input_active = False
+                                        recall_input_active = False
+                                        assign_input_text = ""
+                                        recall_input_text = ""
+                                        break
+                        # Нажате кнопки "Следующий уровень"
+                        if ready_rect.collidepoint(mouse_pos):
+                            if not wave_active:  # Запускаем волну только если предыдущая завершена
+                                enemies = spawn_enemies(ENEMY_LEVEL[village_level], buildings, defenders)
+                                wave_active = True
+                        if legend_button_rect.collidepoint(mouse_pos):
+                            legend_active = not legend_active
+                        if hint_button_rect.collidepoint(mouse_pos):
+                            hint_active = not hint_active
+            
+        # Обновление врагов (если волна активна)
+        if wave_active:
+            # Обновление врагов
+            for enemy in enemies[:]: # Используем копию списка для безопасного удаления
+                enemy.update(buildings, defenders, right_panel_rect, GRID_CELL_SIZE)
+                if enemy.health <= 0:
+                    enemies.remove(enemy)
+
+            # Обновление атакующих зданий
+            for building in buildings[:]: # Используем копию списка для безопасного удаления
+                building.update_attacking_building(enemies, right_panel_rect, GRID_CELL_SIZE)
+
+            for defender in defenders[:]: # Используем копию списка для безопасного удаления
+                defender.update(enemies, right_panel_rect, GRID_CELL_SIZE)
+                if defender.health <= 0:
+                    defenders.remove(defender)
+
+            # Проверяем завершение волны
+            if len(enemies) == 0:
+                wave_active = False
+                village_level += 1  # Повышаем уровень после победы
+                if update_level():
+                    print("Все здания восстановлены!")
+                    update_building_buttons()
+                else:
+                    print("Невозможно восстановить здания - ратуша разрушена!")
+
+        # Отрисовка
+        screen.fill(BLACK)
+            
+        # Обработка дохода от шахт/зельеварок
+        process_mine_income(menu_visible[1])
+
+        
+        # Отрисовка интерфейса
+        draw_interface()
+            
+        # Отрисовка врагов
+        for enemy in enemies:
+            enemy.draw(screen, GRID_CELL_SIZE)
+
+        for defender in defenders:
+            defender.draw(screen)
+        
+        # Обновление экрана
+        pygame.display.flip()
+        clock.tick(100)  # 60 FPS
+    
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
+
+Файл Сlass.py:
+
+import pygame
+import math
+import numpy as np
+
+class Building:
+    """Класс для зданий"""
+    def __init__(self, x, y, width, height, health=100, color=(0, 255, 0), name = "Ратуша"):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.health = health
+        self.max_health = health
+        self.color = color
+        self.destroyed = False
+        self.name = name
+        self.purpose = None
+        self.damage = 50
+        self.attack_cooldown = 0
+        self.attack_delay = 60  # Задержка между атаками (в кадрах)
+        self.timer_building = 0
+        self.max_time_building = 50 # Время построения здания
+        self.construction_readiness = False # Готовность постройки
+        self.added_an_effect = False # Был ли добавлен эфект постройки
+        self.level = 1
+
+
+    def attacking_building_scan_for_target(self, enemies, right_panel_rect, GRID_CELL_SIZE):
+        """Сканирование местности для выбора цели"""
+        if not enemies:
+            return None
+        
+        # Ищем ближайшего живого врага
+        closest_enemy = None
+        min_distance = float('inf')
+        # Координаты центра строения
+        building_pixel_x = right_panel_rect.left + self.rect.x * GRID_CELL_SIZE + (self.rect.width * GRID_CELL_SIZE) // 2
+        building_pixel_y = right_panel_rect.top + self.rect.y * GRID_CELL_SIZE + (self.rect.height * GRID_CELL_SIZE) // 2
+                        
+
+        for enemy in enemies:
+            if not enemy.destroyed:
+                distance = math.sqrt((enemy.x - building_pixel_x)**2 + (enemy.y - building_pixel_y)**2)
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_enemy = enemy
+        return closest_enemy
+        
+    def attack_building(self, right_panel_rect, GRID_CELL_SIZE):
+        """Атака выбранной цели"""
+        if self.purpose and not self.purpose.destroyed and self.attack_cooldown <= 0:
+            # КОНВЕРТИРУЕМ координаты здания в пиксели для проверки коллизии
+            building_pixel_rect = pygame.Rect(
+                right_panel_rect.left + self.rect.x * GRID_CELL_SIZE - self.rect.width * GRID_CELL_SIZE * 2,
+                right_panel_rect.top + self.rect.y * GRID_CELL_SIZE - self.rect.height * GRID_CELL_SIZE * 2,
+                self.rect.width * GRID_CELL_SIZE * 5,
+                self.rect.height * GRID_CELL_SIZE * 5
+            )
+
+            # Создаем rect врага в пикселях
+            enemy_rect = pygame.Rect(self.purpose.x - self.purpose.radius, self.purpose.y - self.purpose.radius, 
+                                     self.purpose.radius * 2, self.purpose.radius * 2
+            )
+
+            # Проверяем коллизию в ПИКСЕЛЬНЫХ координатах
+            if enemy_rect.colliderect(building_pixel_rect):
+                # Наносим урон
+                self.purpose.take_damage(self.damage)
+                self.attack_cooldown = self.attack_delay
+                
+                return True
+        return False
+    
+    def update_attacking_building(self, enemies, right_panel_rect, GRID_CELL_SIZE):
+        if self.construction_readiness and self.name == "Стрелковая башня":
+            # Обновляем кулдаун атаки
+            if self.attack_cooldown > 0:
+                self.attack_cooldown -= 1
+            
+            # Если нет цели или цель разрушена, ищем новую
+            if not self.purpose or self.purpose.destroyed:
+                self.purpose = self.attacking_building_scan_for_target(enemies, right_panel_rect, GRID_CELL_SIZE)
+                
+            # Если есть цель, двигаемся к ней и атакуем
+            if self.purpose and not self.purpose.destroyed:
+                self.attack_building(right_panel_rect, GRID_CELL_SIZE)
+
+    def take_damage(self, damage):
+        """Получение урона зданием"""
+        if self.construction_readiness:
+            if not self.destroyed:
+                self.health -= damage
+                if self.health <= 0:
+                    self.destroyed = True
+                    self.health = 0
+                return True
+            return False
+
+
+class Enemy:
+    """Класс врага"""
+    def __init__(self, x, y, health=100, damage=10, speed=2, radius=10):
+        self.x = x
+        self.y = y
+        self.health = health
+        self.damage = damage
+        self.speed = speed
+        self.radius = radius
+        self.purpose = None  # Целевое здание для атаки
+        self.color = (255, 0, 0)
+        self.attack_cooldown = 0
+        self.attack_delay = 60  # Задержка между атаками (в кадрах)
+        self.destroyed = False
+    
+    def scan_for_target(self, buildings, defenders, right_panel_rect, GRID_CELL_SIZE):
+        """Сканирование местности для выбора цели"""
+        if not buildings and defenders:
+            return None
+        
+        # Ообьединяем наши массивы
+        build_and_defend = []
+        build_and_defend = [*buildings, *defenders]
+
+        # Ищем ближайшее неразрушенное здание
+        closest_building = None
+        min_distance = float('inf')
+        
+        for element in build_and_defend:
+            if not element.destroyed:
+                if type(element) == Building:
+                    # КОНВЕРТИРУЕМ координаты сетки в пиксели!
+                    building_pixel_x = right_panel_rect.left + element.rect.x * GRID_CELL_SIZE + (element.rect.width * GRID_CELL_SIZE) // 2
+                    building_pixel_y = right_panel_rect.top + element.rect.y * GRID_CELL_SIZE + (element.rect.height * GRID_CELL_SIZE) // 2
+                     
+                    distance = math.sqrt((self.x - building_pixel_x)**2 + (self.y - building_pixel_y)**2)
+                      
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_building = element
+                elif type(element) == Defender:
+                    distance = math.sqrt((self.x - element.x)**2 + (self.y - element.y)**2)
+
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_building = element
+        return closest_building    
+    
+    def move_towards_target(self, right_panel_rect, GRID_CELL_SIZE):
+        """Движение к выбранной цели"""
+        if self.purpose and not self.purpose.destroyed:
+            if GRID_CELL_SIZE / 40 < 1:
+                self.x = (self.x - 236) * (1 - (GRID_CELL_SIZE / 40) + 236)
+            #self.x = ((self.x - 236) * (GRID_CELL_SIZE / 40)**2) * 40 + 236
+            if type(self.purpose) == Building:
+                # КОНВЕРТИРУЕМ координаты сетки в пиксели!
+                target_x = right_panel_rect.left + self.purpose.rect.x * GRID_CELL_SIZE + (self.purpose.rect.width * GRID_CELL_SIZE) // 2
+                target_y = right_panel_rect.top + self.purpose.rect.y * GRID_CELL_SIZE + (self.purpose.rect.height * GRID_CELL_SIZE) // 2
+                
+                # Вычисляем направление
+                dx = target_x - self.x
+                dy = target_y - self.y
+                distance = math.sqrt(dx**2 + dy**2)
+                
+                if distance > 0:
+                    # Нормализуем вектор направления
+                    dx /= distance
+                    dy /= distance
+                    
+                    # Двигаемся к цели
+                    self.x += dx * self.speed
+                    self.y += dy * self.speed
+            elif type(self.purpose) == Defender:
+                dx = self.purpose.x - self.x
+                dy = self.purpose.y - self.y
+                distance = math.sqrt(dx**2 + dy**2)
+
+                if distance > self.purpose.radius*2:
+                    dx /= distance
+                    dy /= distance
+                    
+                    self.x += dx * self.speed
+                    self.y += dy * self.speed
+        
+    def attack(self, right_panel_rect, GRID_CELL_SIZE):
+        """Атака выбранной цели"""
+        if self.purpose and not self.purpose.destroyed and self.attack_cooldown <= 0:
+            # Создаем rect врага в пикселях
+            enemy_rect = pygame.Rect(self.x - self.radius, self.y - self.radius, 
+                                    self.radius * 2, self.radius * 2
+            )
+
+            if type(self.purpose) == Building:
+                # КОНВЕРТИРУЕМ координаты здания в пиксели для проверки коллизии
+                building_pixel_rect = pygame.Rect(
+                    right_panel_rect.left + self.purpose.rect.x * GRID_CELL_SIZE,
+                    right_panel_rect.top + self.purpose.rect.y * GRID_CELL_SIZE,
+                    self.purpose.rect.width * GRID_CELL_SIZE,
+                    self.purpose.rect.height * GRID_CELL_SIZE
+                )
+                
+                # Проверяем коллизию в ПИКСЕЛЬНЫХ координатах
+                if enemy_rect.colliderect(building_pixel_rect):
+                    # Наносим урон
+                    damage_dealt = self.purpose.take_damage(self.damage)
+                    self.attack_cooldown = self.attack_delay
+                    
+                    return True
+            elif type(self.purpose) == Defender:
+                # Создаем rect защитника в пикселях
+                defender_rect = pygame.Rect(self.purpose.x - self.purpose.radius, self.purpose.y - self.purpose.radius, 
+                                        self.purpose.radius * 2, self.purpose.radius * 2
+                )
+
+                if enemy_rect.colliderect(defender_rect):
+                    # Наносим урон
+                    damage_dealt = self.purpose.take_damage(self.damage)
+                    self.attack_cooldown = self.attack_delay
+                    
+                    return True
+
+        return False
+    
+    def update(self, buildings, defenders, right_panel_rect, GRID_CELL_SIZE):
+        """Обновление состояния врага"""
+        # Обновляем кулдаун атаки
+        if self.attack_cooldown > 0:
+            self.attack_cooldown -= 1
+        
+        # Если нет цели или цель разрушена, ищем новую
+        if not self.purpose or self.purpose.destroyed:
+            self.purpose = self.scan_for_target(buildings, defenders, right_panel_rect, GRID_CELL_SIZE)
+        
+        # Если есть цель, двигаемся к ней и атакуем
+        if self.purpose and not self.purpose.destroyed:
+            self.move_towards_target(right_panel_rect, GRID_CELL_SIZE)
+            self.attack(right_panel_rect, GRID_CELL_SIZE)
+    
+    def draw(self, screen, GRID_CELL_SIZE):
+        """Отрисовка врага в виде кружка"""
+
+        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius * (GRID_CELL_SIZE / 40))
+        
+        # Отрисовка здоровья над врагом
+        health_text = f"HP: {self.health}"
+        font = pygame.font.Font(None, 20)
+        text_surface = font.render(health_text, True, (255, 255, 255))
+        screen.blit(text_surface, (self.x - 15, self.y - 25))
+
+    def take_damage(self, damage):
+        """Получение урона врагом"""
+        if not self.destroyed:
+            self.health -= damage
+            if self.health <= 0:
+                self.destroyed = True
+                self.health = 0
+            return True
+        return False
+    
+class Defender:
+    '''Класс защитников'''
+    def __init__(self, x, y, health=100, damage=10, speed=2, radius=10):
+        self.x = x
+        self.y = y
+        self.health = health
+        self.damage = damage
+        self.speed = speed
+        self.radius = radius
+        self.purpose = None  # Цель
+        self.color = (0, 255, 0)
+        self.attack_cooldown = 0
+        self.attack_delay = 60  # Задержка между атаками (в кадрах)
+        self.destroyed = False
+
+    def scan_for_target(self, enemies, right_panel_rect, GRID_CELL_SIZE):
+        """Сканирование местности для выбора цели"""
+        if not enemies:
+            return None
+        
+        # Ищем ближайшего живого врага
+        closest_enemy = None
+        min_distance = float('inf')
+        # Координаты центра строения 
+        for enemy in enemies:
+            if not enemy.destroyed:
+                distance = math.sqrt((self.x - enemy.x)**2 + (self.y - enemy.y)**2)
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_enemy = enemy
+        return closest_enemy
+    
+    def move_towards_target(self, right_panel_rect, GRID_CELL_SIZE):
+        """Движение к выбранной цели"""
+        if self.purpose and not self.purpose.destroyed:
+            # КОНВЕРТИРУЕМ координаты сетки в пиксели!
+            
+            # Вычисляем направление
+            dx = self.purpose.x - self.x
+            dy = self.purpose.y - self.y
+            distance = math.sqrt(dx**2 + dy**2)
+            
+            if distance > self.purpose.radius*2:
+                # Нормализуем вектор направления
+                dx /= distance
+                dy /= distance
+                
+                # Двигаемся к цели
+                self.x += dx * self.speed
+                self.y += dy * self.speed
+    
+    def attack(self, right_panel_rect, GRID_CELL_SIZE):
+        """Атака выбранной цели"""
+        if self.purpose and not self.purpose.destroyed and self.attack_cooldown <= 0:
+            # Проверяем расстояние до цели (радиус атаки)
+            distance = math.sqrt((self.x - self.purpose.x)**2 + (self.y - self.purpose.y)**2)
+        
+            # Если враг в радиусе атаки (сумма радиусов защитника и врага)
+            attack_range = self.radius + self.purpose.radius + 5  # +5 для небольшого запаса
+            
+            if distance <= attack_range:
+                # Наносим урон
+                damage_dealt = self.purpose.take_damage(self.damage)
+                self.attack_cooldown = self.attack_delay
+            return True
+        return False
+
+    def update(self, buildings, right_panel_rect, GRID_CELL_SIZE):
+        """Обновление состояния врага"""
+        # Обновляем кулдаун атаки
+        if self.attack_cooldown > 0:
+            self.attack_cooldown -= 1
+        
+        # Если нет цели или цель разрушена, ищем новую
+        if not self.purpose or self.purpose.destroyed:
+            self.purpose = self.scan_for_target(buildings, right_panel_rect, GRID_CELL_SIZE)
+        
+        # Если есть цель, двигаемся к ней и атакуем
+        if self.purpose and not self.purpose.destroyed:
+            self.move_towards_target(right_panel_rect, GRID_CELL_SIZE)
+            self.attack(right_panel_rect, GRID_CELL_SIZE)
+
+    def draw(self, screen):
+        """Отрисовка врага в виде кружка"""
+        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+        
+        # Отрисовка здоровья над врагом
+        health_text = f"HP: {self.health}"
+        font = pygame.font.Font(None, 20)
+        text_surface = font.render(health_text, True, (255, 255, 255))
+        screen.blit(text_surface, (self.x - 15, self.y - 25))
+
+    def take_damage(self, damage):
+        """Получение урона врагом"""
+        if not self.destroyed:
+            self.health -= damage
+            if self.health <= 0:
+                self.destroyed = True
+                self.health = 0
+            return True
+        return False
+
+Файл colors.py: 
+
+# Базовые цвета
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+BLACK = (0, 0, 0)
+
+# Цвета
+BACKGROUND = (30, 30, 40)  # Темно-синий фон
+DIVIDER_COLOR = (100, 100, 120)  # Цвет разделителей
+LEFT_PANEL_COLOR = (50, 60, 80)  # Цвет левой панели
+RIGHT_PANEL_COLOR = (40, 50, 70)  # Цвет правой панели
+BOTTOM_BAR_COLOR = (60, 70, 90)  # Цвет нижней полоски
+GRID_COLOR = (80, 90, 110)  # Цвет сетки
+
+# Цвета для ресурсов
+GOLD_COLOR = (255, 215, 0)  # Золотой
+POTION_COLOR = (0, 255, 0)   # Зеленый для зелий
+POPULATION_COLOR = (200, 100, 255)  # Фиолетовый для жителей
+LEVEL_COLOR = (255, 100, 100)  # Красный для уровня
+
+# Цвета для построек
+TOWN_HALL_COLOR = (255, 200, 150)        # Бледно-оранжевый для ратуши
+STORAGE_GOLD_COLOR = (200, 170, 100)     # Золотистый для хранилища золота
+MINE_COLOR = (150, 100, 50)              # Коричневый для шахты 
+STORAGE_POTION_COLOR = (128, 0, 128)     # Фиолетовый для зельехранилища
+POTION_MAKER_COLOR = (200, 0, 200)       # Светло-фиолетовый для зельеварки
+SHOOTING_TOWER_COLOR = (0, 255, 0)       # Зелёный для стрелковой башни
+MILITARY_CAMP_COLOR = (150, 150, 50)     # Цвет военного лагеря
+WALL_COLOR = (50, 100, 150)              # Цвет стены 
+# Полупрозрачный для предпросмотра
+TOWN_HALL_PREVIEW_COLOR = (255, 200, 150, 128)  
+STORAGE_GOLD_PREVIEW_COLOR = (200, 170, 100, 128)
+MINE_PREVIEW_COLOR = (150, 100, 50, 128)
+STORAGE_POTION_PREVIEW_COLOR = (128, 0, 128, 128)
+POTION_MAKER_PREVIEW_COLOR = (200, 0, 200, 128)
+SHOOTING_TOWER_PREVIEW_COLOR = (0, 255, 0, 128)
+MILITARY_CAMP_PREVIEW_COLOR = (150, 150, 50, 128)
+WALL_PREVIEW_COLOR = (50, 100, 150, 128)
+
+BUTTON_COLOR = (70, 80, 100)  # Цвет кнопок
+BUTTON_HOVER_COLOR = (90, 100, 120)  # Цвет кнопок при наведении
+MENU_COLOR = (80, 90, 110)  # Цвет меню
+READY_BUTTON_COLOR = (90, 10, 80) # Цвет кнопки перехода на след ур
+LEGEND_BUTTON_COLOR = (0, 0, 200) # Цвет кнопки "Легенда"
+LEGEND_PANEL_COLOR = (50, 60, 100) # Цвет панели Легенды
+HINT_BUTTON_COLOR = (15, 25, 210) # Цвет кнопки подсказки "?"
+HINT_PANEL_COLOR = (50, 60, 100) # Цвет панели подсказки
+DESTROYED_BUILDING_COLOR = (200, 200, 200) # Цвет разрушеного здания
+
+UPGRADE_BUTTON_COLOR = (0, 180, 0)        # Зеленый для кнопок улучшения
+LEVELUP_MENU_COLOR = (60, 60, 80)         # Цвет меню улучшения
+
+Файл hint.py:
+
+text = {0: """   1. Это подсказка она открывается и закрывается на кнопку "?", здесь
+будут появляться подсказки по прокачке вашей деревни в процессе игры.
+Первым делом постройте Ратушу - главное здание в вашей деревне.
+Без неё не появятся новые возможности строительства и другие активности""",
+        1: """   2. Ntrcngwefwfewgrerwg""",
+        2:  """1. Главное здание в вашей деревне - Ратуша
+         2. Если нажать на кнопку "Следующий уровень" вас атакуют враги, количество
+         которых зависит от уровня вашей деревни - чем выше уровень, тем больше врагов.
+         Если после атаки Ратуша устоит, то все постройки возобновятся и вы получите
+         доступ к построению новых.
+         3. С каждым новым уровнем у вас будут появляться возможности по постройке
+         новых зданий, их улучшении и усилении ваших защитников
+         4. ....."""
+}

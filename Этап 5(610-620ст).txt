@@ -1,0 +1,651 @@
+теперь добавь ещё возможные для постройки строения: золотохранилище, золотодобывающая шахта. 
+пусть ратушу можно построить только 1 раз и после постройки она пропадает из левой области. 
+добавь максимальный лимит золота в 100 и отображай его в виде (сколько есть)/(лимит) в нижней области, 
+а при постройке золотохранилища лимит будет повышаться на 50 и занимать оно будет 4 клетки. 
+шахта тоже будет размером 4 клетки и в ней можно будет добывать золото, 
+но для этого надо будет направлять туда жителей, без жителей шахта не будет работать, 
+а чем жителей будет больше тем больше будет её доход, пусть 1 житель будет приносить 1 монету в 5 секунд, 
+а для назначения жителей в шахту на построенную шахту можно будет нажать 
+и появится меню с выбором действий(отозвать из шахты, назначить на работу), 
+при выборе каждого будет вводиться количество жителей
+
+import pygame
+import sys
+import time
+
+# Инициализация Pygame
+pygame.init()
+
+# Размеры окна
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 800
+
+# Создание окна
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Деревня - Экономическая стратегия")
+
+# Цвета
+BACKGROUND = (30, 30, 40)  # Темно-синий фон
+DIVIDER_COLOR = (100, 100, 120)  # Цвет разделителей
+LEFT_PANEL_COLOR = (50, 60, 80)  # Цвет левой панели
+RIGHT_PANEL_COLOR = (40, 50, 70)  # Цвет правой панели
+BOTTOM_BAR_COLOR = (60, 70, 90)  # Цвет нижней полоски
+GRID_COLOR = (80, 90, 110)  # Цвет сетки
+
+# Цвета для ресурсов
+GOLD_COLOR = (255, 215, 0)  # Золотой
+POTION_COLOR = (0, 255, 0)   # Зеленый для зелий
+POPULATION_COLOR = (200, 100, 255)  # Фиолетовый для жителей
+LEVEL_COLOR = (255, 100, 100)  # Красный для уровня
+
+# Цвета для построек
+TOWN_HALL_COLOR = (255, 200, 150)  # Бледно-оранжевый для ратуши
+STORAGE_COLOR = (200, 170, 100)    # Золотистый для хранилища
+MINE_COLOR = (150, 100, 50)        # Коричневый для шахты
+TOWN_HALL_PREVIEW_COLOR = (255, 200, 150, 128)  # Полупрозрачный для предпросмотра
+STORAGE_PREVIEW_COLOR = (200, 170, 100, 128)
+MINE_PREVIEW_COLOR = (150, 100, 50, 128)
+
+BUTTON_COLOR = (70, 80, 100)  # Цвет кнопок
+BUTTON_HOVER_COLOR = (90, 100, 120)  # Цвет кнопок при наведении
+MENU_COLOR = (80, 90, 110)  # Цвет меню
+
+# Размеры областей
+BOTTOM_BAR_HEIGHT = 90  # Высота нижней панели
+REMAINING_HEIGHT = SCREEN_HEIGHT - BOTTOM_BAR_HEIGHT
+LEFT_PANEL_WIDTH = REMAINING_HEIGHT // 3  # 1/3 оставшейся высоты для ширины левой панели
+RIGHT_PANEL_WIDTH = SCREEN_WIDTH - LEFT_PANEL_WIDTH
+
+# Параметры сетки для правой панели
+GRID_CELL_SIZE = 40  # Размер клетки в пикселях
+
+# Игровые переменные
+gold = 50            # Количество золота
+gold_limit = 100     # Лимит золота
+potions = 5          # Количество зелий
+population = 42      # Количество жителей
+free_population = 42 # Свободные жители
+village_level = 3    # Уровень деревни
+last_mine_income_time = time.time()  # Время последнего дохода с шахт
+
+# Переменные для строительства
+selected_building = None  # Выбранное здание для постройки
+buildings = []  # Список построенных зданий
+mines = {}      # Словарь шахт: {id: {"workers": 0, "last_income": time}}
+
+# Размеры построек (в клетках)
+BUILDING_SIZES = {
+    "town_hall": (3, 2),      # Ратуша: 3x2
+    "storage": (2, 2),        # Хранилище: 2x2
+    "mine": (2, 2)            # Шахта: 2x2
+}
+
+# Стоимость построек
+BUILDING_COSTS = {
+    "town_hall": {"gold": 500, "potions": 2},
+    "storage": {"gold": 200, "potions": 1},
+    "mine": {"gold": 300, "potions": 0}
+}
+
+# Лимиты построек
+BUILDING_LIMITS = {
+    "town_hall": 1,
+    "storage": 999,  # Практически без лимита
+    "mine": 999
+}
+
+# Переменные для меню
+selected_mine_id = None  # Выбранная шахта для управления
+mine_menu_visible = False
+mine_menu_rect = pygame.Rect(0, 0, 300, 150)
+assign_input_active = False
+assign_input_text = ""
+recall_input_active = False
+recall_input_text = ""
+
+# Определение прямоугольников для каждой области
+left_panel_rect = pygame.Rect(0, 0, LEFT_PANEL_WIDTH, REMAINING_HEIGHT)
+right_panel_rect = pygame.Rect(LEFT_PANEL_WIDTH, 0, RIGHT_PANEL_WIDTH, REMAINING_HEIGHT)
+bottom_bar_rect = pygame.Rect(0, REMAINING_HEIGHT, SCREEN_WIDTH, BOTTOM_BAR_HEIGHT)
+
+# Кнопки построек в левой панели
+building_buttons = {}
+
+# Шрифты
+font = pygame.font.Font(None, 36)
+small_font = pygame.font.Font(None, 24)
+
+def update_building_buttons():
+    """Обновляет кнопки доступных построек"""
+    global building_buttons
+    building_buttons = {}
+    y_offset = 100
+    
+    for building_name in ["town_hall", "storage", "mine"]:
+        # Проверяем лимит построек
+        current_count = sum(1 for b in buildings if b[0] == building_name)
+        if current_count < BUILDING_LIMITS[building_name]:
+            building_buttons[building_name] = pygame.Rect(20, y_offset, LEFT_PANEL_WIDTH - 40, 60)
+            y_offset += 70
+
+def draw_grid(surface, rect, cell_size, color):
+    """Отрисовка сетки в указанной области"""
+    start_x = rect.left
+    start_y = rect.top
+    end_x = rect.right
+    end_y = rect.bottom
+    
+    # Вертикальные линии
+    for x in range(start_x, end_x, cell_size):
+        pygame.draw.line(surface, color, (x, start_y), (x, end_y), 1)
+    
+    # Горизонтальные линии
+    for y in range(start_y, end_y, cell_size):
+        pygame.draw.line(surface, color, (start_x, y), (end_x, y), 1)
+
+def get_building_color(building_name):
+    """Возвращает цвет здания по его имени"""
+    colors = {
+        "town_hall": TOWN_HALL_COLOR,
+        "storage": STORAGE_COLOR,
+        "mine": MINE_COLOR
+    }
+    return colors.get(building_name, (255, 255, 255))
+
+def get_building_preview_color(building_name):
+    """Возвращает цвет предпросмотра здания"""
+    colors = {
+        "town_hall": TOWN_HALL_PREVIEW_COLOR,
+        "storage": STORAGE_PREVIEW_COLOR,
+        "mine": MINE_PREVIEW_COLOR
+    }
+    return colors.get(building_name, (255, 255, 255, 128))
+
+def draw_buildings():
+    """Отрисовка всех построенных зданий"""
+    for i, building in enumerate(buildings):
+        name, grid_x, grid_y = building
+        width, height = BUILDING_SIZES[name]
+        
+        # Конвертируем координаты сетки в пиксели
+        pixel_x = right_panel_rect.left + grid_x * GRID_CELL_SIZE
+        pixel_y = right_panel_rect.top + grid_y * GRID_CELL_SIZE
+        pixel_width = width * GRID_CELL_SIZE
+        pixel_height = height * GRID_CELL_SIZE
+        
+        # Отрисовываем здание
+        color = get_building_color(name)
+        pygame.draw.rect(screen, color, (pixel_x, pixel_y, pixel_width, pixel_height))
+        
+        # Обводка здания (подсветка если выбрано)
+        if name == "mine" and selected_mine_id == i:
+            pygame.draw.rect(screen, (255, 255, 0), (pixel_x, pixel_y, pixel_width, pixel_height), 3)
+        else:
+            pygame.draw.rect(screen, (200, 200, 200), (pixel_x, pixel_y, pixel_width, pixel_height), 2)
+        
+        # Название здания и информация
+        if name == "town_hall":
+            name_text = small_font.render("Ратуша", True, (0, 0, 0))
+            screen.blit(name_text, (pixel_x + 10, pixel_y + 10))
+        elif name == "storage":
+            name_text = small_font.render("Хранилище", True, (0, 0, 0))
+            screen.blit(name_text, (pixel_x + 5, pixel_y + 10))
+        elif name == "mine":
+            name_text = small_font.render("Шахта", True, (0, 0, 0))
+            workers = mines.get(i, {}).get("workers", 0)
+            workers_text = small_font.render(f"Раб: {workers}", True, (0, 0, 0))
+            screen.blit(name_text, (pixel_x + 15, pixel_y + 5))
+            screen.blit(workers_text, (pixel_x + 10, pixel_y + 25))
+
+def draw_building_preview(mouse_pos):
+    """Отрисовка предпросмотра здания при строительстве"""
+    if selected_building:
+        # Проверяем, что курсор в правой панели
+        if (right_panel_rect.left <= mouse_pos[0] <= right_panel_rect.right and
+            right_panel_rect.top <= mouse_pos[1] <= right_panel_rect.bottom):
+            
+            # Вычисляем координаты сетки
+            grid_x = (mouse_pos[0] - right_panel_rect.left) // GRID_CELL_SIZE
+            grid_y = (mouse_pos[1] - right_panel_rect.top) // GRID_CELL_SIZE
+            
+            width, height = BUILDING_SIZES[selected_building]
+            
+            # Проверяем, что здание помещается в границы
+            if (grid_x + width <= (right_panel_rect.width // GRID_CELL_SIZE) and
+                grid_y + height <= (right_panel_rect.height // GRID_CELL_SIZE)):
+                
+                # Конвертируем координаты сетки в пиксели
+                pixel_x = right_panel_rect.left + grid_x * GRID_CELL_SIZE
+                pixel_y = right_panel_rect.top + grid_y * GRID_CELL_SIZE
+                pixel_width = width * GRID_CELL_SIZE
+                pixel_height = height * GRID_CELL_SIZE
+                
+                # Создаем поверхность с альфа-каналом для полупрозрачности
+                preview_surface = pygame.Surface((pixel_width, pixel_height), pygame.SRCALPHA)
+                preview_color = get_building_preview_color(selected_building)
+                preview_surface.fill(preview_color)
+                screen.blit(preview_surface, (pixel_x, pixel_y))
+                
+                # Обводка предпросмотра
+                pygame.draw.rect(screen, (255, 255, 255, 180), (pixel_x, pixel_y, pixel_width, pixel_height), 2)
+
+def draw_building_buttons():
+    """Отрисовка кнопок построек в левой панели"""
+    title_text = font.render("Доступные постройки:", True, (255, 255, 255))
+    screen.blit(title_text, (20, 50))
+    
+    for building_name, button_rect in building_buttons.items():
+        # Определяем цвет кнопки
+        mouse_pos = pygame.mouse.get_pos()
+        if button_rect.collidepoint(mouse_pos):
+            color = BUTTON_HOVER_COLOR
+        else:
+            color = BUTTON_COLOR
+        
+        # Рисуем кнопку
+        pygame.draw.rect(screen, color, button_rect, border_radius=8)
+        pygame.draw.rect(screen, DIVIDER_COLOR, button_rect, 2, border_radius=8)
+        
+        # Текст кнопки
+        cost = BUILDING_COSTS[building_name]
+        size = BUILDING_SIZES[building_name]
+        
+        if building_name == "town_hall":
+            name_text = "Ратуша"
+        elif building_name == "storage":
+            name_text = "Хранилище"
+        elif building_name == "mine":
+            name_text = "Шахта"
+        
+        button_text = font.render(name_text, True, (255, 255, 255))
+        cost_text = small_font.render(f"💰{cost['gold']} 🧪{cost['potions']}", True, (200, 200, 200))
+        size_text = small_font.render(f"Размер: {size[0]}x{size[1]}", True, (180, 180, 180))
+        
+        screen.blit(button_text, (button_rect.x + 20, button_rect.y + 10))
+        screen.blit(cost_text, (button_rect.x + 20, button_rect.y + 35))
+        screen.blit(size_text, (button_rect.x + 150, button_rect.y + 35))
+
+def draw_mine_menu():
+    """Отрисовка меню управления шахтой"""
+    if mine_menu_visible and selected_mine_id is not None:
+        # Позиционируем меню рядом с выбранной шахтой
+        mine_info = buildings[selected_mine_id]
+        name, grid_x, grid_y = mine_info
+        pixel_x = right_panel_rect.left + grid_x * GRID_CELL_SIZE
+        pixel_y = right_panel_rect.top + grid_y * GRID_CELL_SIZE
+        
+        mine_menu_rect.x = pixel_x + 100
+        mine_menu_rect.y = pixel_y
+        
+        # Ограничиваем, чтобы меню не выходило за экран
+        if mine_menu_rect.right > SCREEN_WIDTH:
+            mine_menu_rect.right = SCREEN_WIDTH - 10
+        if mine_menu_rect.bottom > REMAINING_HEIGHT:
+            mine_menu_rect.bottom = REMAINING_HEIGHT - 10
+        
+        # Рисуем меню
+        pygame.draw.rect(screen, MENU_COLOR, mine_menu_rect, border_radius=8)
+        pygame.draw.rect(screen, DIVIDER_COLOR, mine_menu_rect, 2, border_radius=8)
+        
+        # Информация о шахте
+        workers = mines.get(selected_mine_id, {}).get("workers", 0)
+        title_text = font.render("Управление шахтой", True, (255, 255, 255))
+        workers_text = small_font.render(f"Работает: {workers} жителей", True, (200, 200, 200))
+        income_text = small_font.render(f"Доход: {workers} золота/5сек", True, (200, 255, 200))
+        
+        screen.blit(title_text, (mine_menu_rect.x + 10, mine_menu_rect.y + 10))
+        screen.blit(workers_text, (mine_menu_rect.x + 10, mine_menu_rect.y + 40))
+        screen.blit(income_text, (mine_menu_rect.x + 10, mine_menu_rect.y + 60))
+        
+        # Кнопки управления
+        assign_rect = pygame.Rect(mine_menu_rect.x + 10, mine_menu_rect.y + 85, 130, 25)
+        recall_rect = pygame.Rect(mine_menu_rect.x + 150, mine_menu_rect.y + 85, 130, 25)
+        close_rect = pygame.Rect(mine_menu_rect.x + 10, mine_menu_rect.y + 115, 270, 25)
+        
+        # Кнопка назначения
+        assign_color = BUTTON_HOVER_COLOR if assign_input_active else BUTTON_COLOR
+        pygame.draw.rect(screen, assign_color, assign_rect, border_radius=4)
+        assign_text = small_font.render(f"Назначить: {assign_input_text}", True, (255, 255, 255))
+        screen.blit(assign_text, (assign_rect.x + 5, assign_rect.y + 5))
+        
+        # Кнопка отзыва
+        recall_color = BUTTON_HOVER_COLOR if recall_input_active else BUTTON_COLOR
+        pygame.draw.rect(screen, recall_color, recall_rect, border_radius=4)
+        recall_text = small_font.render(f"Отозвать: {recall_input_text}", True, (255, 255, 255))
+        screen.blit(recall_text, (recall_rect.x + 5, recall_rect.y + 5))
+        
+        # Кнопка закрытия
+        pygame.draw.rect(screen, BUTTON_COLOR, close_rect, border_radius=4)
+        close_text = small_font.render("Закрыть", True, (255, 255, 255))
+        screen.blit(close_text, (close_rect.x + 100, close_rect.y + 5))
+
+def draw_resources():
+    """Отрисовка информации о ресурсах на нижней панели"""
+    # Создаем тексты с иконками
+    gold_text = font.render(f"💰 Золото: {gold}/{gold_limit}", True, GOLD_COLOR)
+    potion_text = font.render(f"🧪 Зелья: {potions}", True, POTION_COLOR)
+    population_text = font.render(f"👥 Жители: {free_population}/{population}", True, POPULATION_COLOR)
+    level_text = font.render(f"🏠 Уровень: {village_level}", True, LEVEL_COLOR)
+    
+    # Располагаем тексты равномерно по нижней панели
+    spacing = SCREEN_WIDTH // 5
+    
+    screen.blit(gold_text, (spacing * 1 - 120, REMAINING_HEIGHT + 15))
+    screen.blit(potion_text, (spacing * 2 - 100, REMAINING_HEIGHT + 15))
+    screen.blit(population_text, (spacing * 3 - 120, REMAINING_HEIGHT + 15))
+    screen.blit(level_text, (spacing * 4 - 100, REMAINING_HEIGHT + 15))
+
+def can_afford_building(building_name):
+    """Проверяет, хватает ли ресурсов для постройки"""
+    cost = BUILDING_COSTS[building_name]
+    return gold >= cost["gold"] and potions >= cost["potions"] and gold + cost["gold"] <= gold_limit
+
+def build_building(building_name, grid_x, grid_y):
+    """Строит здание в указанных координатах сетки"""
+    global gold, potions, gold_limit
+    
+    if can_afford_building(building_name):
+        cost = BUILDING_COSTS[building_name]
+        gold -= cost["gold"]
+        potions -= cost["potions"]
+        
+        buildings.append((building_name, grid_x, grid_y))
+        
+        # Особые эффекты построек
+        if building_name == "storage":
+            gold_limit += 50  # Хранилище увеличивает лимит золота
+        elif building_name == "mine":
+            mine_id = len(buildings) - 1
+            mines[mine_id] = {"workers": 0, "last_income": time.time()}
+        
+        # Обновляем кнопки (ратуша исчезнет после постройки)
+        update_building_buttons()
+        return True
+    return False
+
+def process_mine_income():
+    """Обрабатывает доход от шахт"""
+    global gold, last_mine_income_time
+    
+    current_time = time.time()
+    if current_time - last_mine_income_time >= 5:  # Каждые 5 секунд
+        total_income = 0
+        for mine_id, mine_data in mines.items():
+            workers = mine_data.get("workers", 0)
+            total_income += workers
+        
+        if total_income > 0:
+            # Не превышаем лимит золота
+            actual_income = min(total_income, gold_limit - gold)
+            if actual_income > 0:
+                gold += actual_income
+        
+        last_mine_income_time = current_time
+
+def assign_workers_to_mine(mine_id, count):
+    """Назначает рабочих в шахту"""
+    global free_population
+    
+    if mine_id in mines and count > 0 and count <= free_population:
+        mines[mine_id]["workers"] += count
+        free_population -= count
+        return True
+    return False
+
+def recall_workers_from_mine(mine_id, count):
+    """Отзывает рабочих из шахты"""
+    global free_population
+    
+    if mine_id in mines:
+        current_workers = mines[mine_id].get("workers", 0)
+        actual_count = min(count, current_workers)
+        if actual_count > 0:
+            mines[mine_id]["workers"] -= actual_count
+            free_population += actual_count
+            return True
+    return False
+
+def draw_interface():
+    """Отрисовка интерфейса с тремя областями"""
+    # Очистка экрана
+    screen.fill(BACKGROUND)
+    
+    # Отрисовка панелей
+    pygame.draw.rect(screen, LEFT_PANEL_COLOR, left_panel_rect)
+    pygame.draw.rect(screen, RIGHT_PANEL_COLOR, right_panel_rect)
+    pygame.draw.rect(screen, BOTTOM_BAR_COLOR, bottom_bar_rect)
+    
+    # Отрисовка сетки в правой панели
+    draw_grid(screen, right_panel_rect, GRID_CELL_SIZE, GRID_COLOR)
+    
+    # Отрисовка построек
+    draw_buildings()
+    
+    # Отрисовка кнопок построек
+    draw_building_buttons()
+    
+    # Отрисовка предпросмотра здания
+    draw_building_preview(pygame.mouse.get_pos())
+    
+    # Отрисовка меню шахты
+    if mine_menu_visible:
+        draw_mine_menu()
+    
+    # Отрисовка разделителей
+    pygame.draw.line(screen, DIVIDER_COLOR, 
+                    (LEFT_PANEL_WIDTH, 0), 
+                    (LEFT_PANEL_WIDTH, REMAINING_HEIGHT), 3)
+    pygame.draw.line(screen, DIVIDER_COLOR, 
+                    (0, REMAINING_HEIGHT), 
+                    (SCREEN_WIDTH, REMAINING_HEIGHT), 3)
+    
+    # Отрисовка ресурсов на нижней панели
+    draw_resources()
+
+def main():
+    """Главный игровой цикл"""
+    clock = pygame.time.Clock()
+    running = True
+    global selected_building, selected_mine_id, mine_menu_visible
+    global assign_input_active, assign_input_text, recall_input_active, recall_input_text
+    
+    # Инициализация кнопок построек
+    update_building_buttons()
+    
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+        
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    if mine_menu_visible:
+                        mine_menu_visible = False
+                        assign_input_active = False
+                        recall_input_active = False
+                        assign_input_text = ""
+                        recall_input_text = ""
+                    else:
+                        selected_building = None  # Отмена строительства
+                
+                # Обработка ввода текста для меню шахты
+                elif mine_menu_visible:
+                    if assign_input_active:
+                        if event.key == pygame.K_RETURN:
+                            try:
+                                count = int(assign_input_text)
+                                assign_workers_to_mine(selected_mine_id, count)
+                                assign_input_text = ""
+                            except ValueError:
+                                pass
+                        elif event.key == pygame.K_BACKSPACE:
+                            assign_input_text = assign_input_text[:-1]
+                        elif event.unicode.isdigit():
+                            assign_input_text += event.unicode
+                    
+                    elif recall_input_active:
+                        if event.key == pygame.K_RETURN:
+                            try:
+                                count = int(recall_input_text)
+                                recall_workers_from_mine(selected_mine_id, count)
+                                recall_input_text = ""
+                            except ValueError:
+                                pass
+                        elif event.key == pygame.K_BACKSPACE:
+                            recall_input_text = recall_input_text[:-1]
+                        elif event.unicode.isdigit():
+                            recall_input_text += event.unicode
+                
+                # Тестовое изменение ресурсов
+                elif not mine_menu_visible:
+                    if event.key == pygame.K_g:
+                        global gold
+                        gold = min(gold + 100, gold_limit)
+                    elif event.key == pygame.K_p:
+                        global potions
+                        potions += 1
+                    elif event.key == pygame.K_h:
+                        global population, free_population
+                        population += 1
+                        free_population += 1
+                    elif event.key == pygame.K_l:
+                        global village_level
+                        village_level += 1
+                    elif event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS:
+                        global GRID_CELL_SIZE
+                        GRID_CELL_SIZE = min(100, GRID_CELL_SIZE + 5)
+                    elif event.key == pygame.K_MINUS:
+                        GRID_CELL_SIZE = max(10, GRID_CELL_SIZE - 5)
+            
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_pos = pygame.mouse.get_pos()
+                
+                if mine_menu_visible:
+                    # Обработка кликов в меню шахты
+                    assign_rect = pygame.Rect(mine_menu_rect.x + 10, mine_menu_rect.y + 85, 130, 25)
+                    recall_rect = pygame.Rect(mine_menu_rect.x + 150, mine_menu_rect.y + 85, 130, 25)
+                    close_rect = pygame.Rect(mine_menu_rect.x + 10, mine_menu_rect.y + 115, 270, 25)
+                    
+                    if assign_rect.collidepoint(mouse_pos):
+                        assign_input_active = True
+                        recall_input_active = False
+                    elif recall_rect.collidepoint(mouse_pos):
+                        recall_input_active = True
+                        assign_input_active = False
+                    elif close_rect.collidepoint(mouse_pos):
+                        mine_menu_visible = False
+                        assign_input_active = False
+                        recall_input_active = False
+                        assign_input_text = ""
+                        recall_input_text = ""
+                    else:
+                        # Клик вне меню - закрываем его
+                        mine_menu_visible = False
+                        assign_input_active = False
+                        recall_input_active = False
+                
+                else:
+                    # Клик в левой панели - выбор здания
+                    if left_panel_rect.collidepoint(mouse_pos):
+                        for building_name, button_rect in building_buttons.items():
+                            if button_rect.collidepoint(mouse_pos) and can_afford_building(building_name):
+                                selected_building = building_name
+                    
+                    # Клик в правой панели
+                    elif right_panel_rect.collidepoint(mouse_pos):
+                        if selected_building:
+                            # Режим строительства
+                            grid_x = (mouse_pos[0] - right_panel_rect.left) // GRID_CELL_SIZE
+                            grid_y = (mouse_pos[1] - right_panel_rect.top) // GRID_CELL_SIZE
+                            
+                            width, height = BUILDING_SIZES[selected_building]
+                            
+                            # Проверяем, что здание помещается
+                            if (grid_x + width <= (right_panel_rect.width // GRID_CELL_SIZE) and
+                                grid_y + height <= (right_panel_rect.height // GRID_CELL_SIZE)):
+                                
+                                if build_building(selected_building, grid_x, grid_y):
+                                    selected_building = None  # Сброс после успешной постройки
+                        
+                        else:
+                            # Режим выбора шахты для управления
+                            grid_x = (mouse_pos[0] - right_panel_rect.left) // GRID_CELL_SIZE
+                            grid_y = (mouse_pos[1] - right_panel_rect.top) // GRID_CELL_SIZE
+                            
+                            # Ищем шахту по координатам
+                            for i, building in enumerate(buildings):
+                                name, b_grid_x, b_grid_y = building
+                                width, height = BUILDING_SIZES[name]
+                                
+                                if (name == "mine" and 
+                                    b_grid_x <= grid_x < b_grid_x + width and
+                                    b_grid_y <= grid_y < b_grid_y + height):
+                                    
+                                    selected_mine_id = i
+                                    mine_menu_visible = True
+                                    assign_input_active = False
+                                    recall_input_active = False
+                                    assign_input_text = ""
+                                    recall_input_text = ""
+                                    break
+        
+        # Обработка дохода от шахт
+        process_mine_income()
+        
+        # Отрисовка интерфейса
+        draw_interface()
+        
+        # Отображение информации
+        grid_info = font.render(f"Размер клетки: {GRID_CELL_SIZE}px", True, (200, 200, 200))
+        help_text = small_font.render("Тест: G-золото, P-зелья, H-жители, L-уровень, ESC-отмена", True, (150, 150, 150))
+        
+        screen.blit(grid_info, (LEFT_PANEL_WIDTH + 50, 70))
+        screen.blit(help_text, (LEFT_PANEL_WIDTH + 50, 110))
+        
+        # Обновление экрана
+        pygame.display.flip()
+        clock.tick(60)  # 60 FPS
+    
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
+
+Новые возможности:
+🏗️ Новые постройки:
+🏛️ Ратуша: Можно построить только 1 раз, исчезает из списка после постройки
+
+🏦 Золотохранилище: Увеличивает лимит золота на 50, размер 2x2 клетки
+
+⛏️ Золотодобывающая шахта: Производит золото, размер 2x2 клетки
+
+💰 Система золота:
+Лимит золота: Отображается как текущее/максимальное
+
+Хранилища: Каждое увеличивает лимит на 50 золота
+
+Шахты: Производят золото в зависимости от рабочих
+
+👥 Система рабочих:
+Свободные жители: Отдельный счетчик от общего населения
+
+Назначение в шахты: 1 рабочий = 1 золото каждые 5 секунд
+
+Меню управления: Клик на шахту открывает меню назначения/отзыва рабочих
+
+🎮 Управление шахтой:
+Назначить рабочих: Ввод количества и подтверждение
+
+Отозвать рабочих: Возвращение жителей в свободное население
+
+Закрыть меню: Кнопка закрытия или ESC
+
+📊 Улучшенный интерфейс:
+Динамические кнопки: Ратуша исчезает после постройки
+
+Подсветка выбранной шахты: Желтая обводка
+
+Информация о рабочих: Отображается прямо на шахте
+
+Теперь у тебя полноценная экономическая стратегия с системой ресурсов, строительства и управления рабочими!

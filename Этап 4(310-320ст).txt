@@ -1,0 +1,345 @@
+в левой области должны предлагаться возможные для постройки строения. 
+для начала пусть это будет ратуша занимающая при постройке 6 клеток. 
+сначала нажимаешь на неё в левой области, 
+затем выбираешь клетку которая будет соответствовать верхней левой угловой клетке
+ратуши(из 6 клеток) и пусть ратуша будет бледно оранжевая оранжевая. 
+А нижняя облость пусть будет не 30 а 90
+
+import pygame
+import sys
+
+# Инициализация Pygame
+pygame.init()
+
+# Размеры окна
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 800
+
+# Создание окна
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Деревня - Строительство")
+
+# Цвета
+BACKGROUND = (30, 30, 40)  # Темно-синий фон
+DIVIDER_COLOR = (100, 100, 120)  # Цвет разделителей
+LEFT_PANEL_COLOR = (50, 60, 80)  # Цвет левой панели
+RIGHT_PANEL_COLOR = (40, 50, 70)  # Цвет правой панели
+BOTTOM_BAR_COLOR = (60, 70, 90)  # Цвет нижней полоски
+GRID_COLOR = (80, 90, 110)  # Цвет сетки
+
+# Цвета для ресурсов
+GOLD_COLOR = (255, 215, 0)  # Золотой
+POTION_COLOR = (0, 255, 0)   # Зеленый для зелий
+POPULATION_COLOR = (200, 100, 255)  # Фиолетовый для жителей
+LEVEL_COLOR = (255, 100, 100)  # Красный для уровня
+
+# Цвета для построек
+TOWN_HALL_COLOR = (255, 200, 150)  # Бледно-оранжевый для ратуши
+TOWN_HALL_PREVIEW_COLOR = (255, 200, 150, 128)  # Полупрозрачный для предпросмотра
+BUTTON_COLOR = (70, 80, 100)  # Цвет кнопок
+BUTTON_HOVER_COLOR = (90, 100, 120)  # Цвет кнопок при наведении
+
+# Размеры областей
+BOTTOM_BAR_HEIGHT = 90  # Увеличена высота нижней панели
+REMAINING_HEIGHT = SCREEN_HEIGHT - BOTTOM_BAR_HEIGHT
+LEFT_PANEL_WIDTH = REMAINING_HEIGHT // 3  # 1/3 оставшейся высоты для ширины левой панели
+RIGHT_PANEL_WIDTH = SCREEN_WIDTH - LEFT_PANEL_WIDTH
+
+# Параметры сетки для правой панели
+GRID_CELL_SIZE = 40  # Размер клетки в пикселях
+
+# Игровые переменные
+gold = 1000          # Количество золота
+potions = 5          # Количество зелий
+population = 42      # Количество жителей
+village_level = 3    # Уровень деревни
+
+# Переменные для строительства
+selected_building = None  # Выбранное здание для постройки
+buildings = []  # Список построенных зданий
+
+# Размеры построек (в клетках)
+BUILDING_SIZES = {
+    "town_hall": (3, 2)  # Ратуша: 3 клетки в ширину, 2 в высоту
+}
+
+# Стоимость построек
+BUILDING_COSTS = {
+    "town_hall": {"gold": 500, "potions": 2}
+}
+
+# Определение прямоугольников для каждой области
+left_panel_rect = pygame.Rect(0, 0, LEFT_PANEL_WIDTH, REMAINING_HEIGHT)
+right_panel_rect = pygame.Rect(LEFT_PANEL_WIDTH, 0, RIGHT_PANEL_WIDTH, REMAINING_HEIGHT)
+bottom_bar_rect = pygame.Rect(0, REMAINING_HEIGHT, SCREEN_WIDTH, BOTTOM_BAR_HEIGHT)
+
+# Кнопки построек в левой панели
+building_buttons = {
+    "town_hall": pygame.Rect(20, 100, LEFT_PANEL_WIDTH - 40, 60)
+}
+
+# Шрифты
+font = pygame.font.Font(None, 36)
+small_font = pygame.font.Font(None, 24)
+
+def draw_grid(surface, rect, cell_size, color):
+    """Отрисовка сетки в указанной области"""
+    start_x = rect.left
+    start_y = rect.top
+    end_x = rect.right
+    end_y = rect.bottom
+    
+    # Вертикальные линии
+    for x in range(start_x, end_x, cell_size):
+        pygame.draw.line(surface, color, (x, start_y), (x, end_y), 1)
+    
+    # Горизонтальные линии
+    for y in range(start_y, end_y, cell_size):
+        pygame.draw.line(surface, color, (start_x, y), (end_x, y), 1)
+
+def draw_buildings():
+    """Отрисовка всех построенных зданий"""
+    for building in buildings:
+        name, grid_x, grid_y = building
+        width, height = BUILDING_SIZES[name]
+        
+        # Конвертируем координаты сетки в пиксели
+        pixel_x = right_panel_rect.left + grid_x * GRID_CELL_SIZE
+        pixel_y = right_panel_rect.top + grid_y * GRID_CELL_SIZE
+        pixel_width = width * GRID_CELL_SIZE
+        pixel_height = height * GRID_CELL_SIZE
+        
+        # Отрисовываем здание
+        if name == "town_hall":
+            pygame.draw.rect(screen, TOWN_HALL_COLOR, (pixel_x, pixel_y, pixel_width, pixel_height))
+            # Обводка здания
+            pygame.draw.rect(screen, (200, 150, 100), (pixel_x, pixel_y, pixel_width, pixel_height), 2)
+            
+            # Название здания
+            name_text = small_font.render("Ратуша", True, (0, 0, 0))
+            screen.blit(name_text, (pixel_x + 10, pixel_y + 10))
+
+def draw_building_preview(mouse_pos):
+    """Отрисовка предпросмотра здания при строительстве"""
+    if selected_building:
+        # Проверяем, что курсор в правой панели
+        if (right_panel_rect.left <= mouse_pos[0] <= right_panel_rect.right and
+            right_panel_rect.top <= mouse_pos[1] <= right_panel_rect.bottom):
+            
+            # Вычисляем координаты сетки
+            grid_x = (mouse_pos[0] - right_panel_rect.left) // GRID_CELL_SIZE
+            grid_y = (mouse_pos[1] - right_panel_rect.top) // GRID_CELL_SIZE
+            
+            width, height = BUILDING_SIZES[selected_building]
+            
+            # Проверяем, что здание помещается в границы
+            if (grid_x + width <= (right_panel_rect.width // GRID_CELL_SIZE) and
+                grid_y + height <= (right_panel_rect.height // GRID_CELL_SIZE)):
+                
+                # Конвертируем координаты сетки в пиксели
+                pixel_x = right_panel_rect.left + grid_x * GRID_CELL_SIZE
+                pixel_y = right_panel_rect.top + grid_y * GRID_CELL_SIZE
+                pixel_width = width * GRID_CELL_SIZE
+                pixel_height = height * GRID_CELL_SIZE
+                
+                # Создаем поверхность с альфа-каналом для полупрозрачности
+                preview_surface = pygame.Surface((pixel_width, pixel_height), pygame.SRCALPHA)
+                preview_surface.fill(TOWN_HALL_PREVIEW_COLOR)
+                screen.blit(preview_surface, (pixel_x, pixel_y))
+                
+                # Обводка предпросмотра
+                pygame.draw.rect(screen, (255, 255, 255, 180), (pixel_x, pixel_y, pixel_width, pixel_height), 2)
+
+def draw_building_buttons():
+    """Отрисовка кнопок построек в левой панели"""
+    title_text = font.render("Доступные постройки:", True, (255, 255, 255))
+    screen.blit(title_text, (20, 50))
+    
+    for building_name, button_rect in building_buttons.items():
+        # Определяем цвет кнопки
+        mouse_pos = pygame.mouse.get_pos()
+        if button_rect.collidepoint(mouse_pos):
+            color = BUTTON_HOVER_COLOR
+        else:
+            color = BUTTON_COLOR
+        
+        # Рисуем кнопку
+        pygame.draw.rect(screen, color, button_rect, border_radius=8)
+        pygame.draw.rect(screen, DIVIDER_COLOR, button_rect, 2, border_radius=8)
+        
+        # Текст кнопки
+        if building_name == "town_hall":
+            cost = BUILDING_COSTS["town_hall"]
+            button_text = font.render("Ратуша", True, (255, 255, 255))
+            cost_text = small_font.render(f"💰{cost['gold']} 🧪{cost['potions']}", True, (200, 200, 200))
+            size_text = small_font.render(f"Размер: 3x2 клетки", True, (180, 180, 180))
+            
+            screen.blit(button_text, (button_rect.x + 20, button_rect.y + 10))
+            screen.blit(cost_text, (button_rect.x + 20, button_rect.y + 35))
+            screen.blit(size_text, (button_rect.x + 150, button_rect.y + 35))
+
+def draw_resources():
+    """Отрисовка информации о ресурсах на нижней панели"""
+    # Создаем тексты с иконками
+    gold_text = font.render(f"💰 Золото: {gold}", True, GOLD_COLOR)
+    potion_text = font.render(f"🧪 Зелья: {potions}", True, POTION_COLOR)
+    population_text = font.render(f"👥 Жители: {population}", True, POPULATION_COLOR)
+    level_text = font.render(f"🏠 Уровень: {village_level}", True, LEVEL_COLOR)
+    
+    # Располагаем тексты равномерно по нижней панели
+    spacing = SCREEN_WIDTH // 5
+    
+    screen.blit(gold_text, (spacing * 1 - 100, REMAINING_HEIGHT + 15))
+    screen.blit(potion_text, (spacing * 2 - 100, REMAINING_HEIGHT + 15))
+    screen.blit(population_text, (spacing * 3 - 100, REMAINING_HEIGHT + 15))
+    screen.blit(level_text, (spacing * 4 - 100, REMAINING_HEIGHT + 15))
+
+def can_afford_building(building_name):
+    """Проверяет, хватает ли ресурсов для постройки"""
+    cost = BUILDING_COSTS[building_name]
+    return gold >= cost["gold"] and potions >= cost["potions"]
+
+def build_building(building_name, grid_x, grid_y):
+    """Строит здание в указанных координатах сетки"""
+    global gold, potions
+    
+    if can_afford_building(building_name):
+        cost = BUILDING_COSTS[building_name]
+        gold -= cost["gold"]
+        potions -= cost["potions"]
+        
+        buildings.append((building_name, grid_x, grid_y))
+        return True
+    return False
+
+def draw_interface():
+    """Отрисовка интерфейса с тремя областями"""
+    # Очистка экрана
+    screen.fill(BACKGROUND)
+    
+    # Отрисовка панелей
+    pygame.draw.rect(screen, LEFT_PANEL_COLOR, left_panel_rect)
+    pygame.draw.rect(screen, RIGHT_PANEL_COLOR, right_panel_rect)
+    pygame.draw.rect(screen, BOTTOM_BAR_COLOR, bottom_bar_rect)
+    
+    # Отрисовка сетки в правой панели
+    draw_grid(screen, right_panel_rect, GRID_CELL_SIZE, GRID_COLOR)
+    
+    # Отрисовка построек
+    draw_buildings()
+    
+    # Отрисовка кнопок построек
+    draw_building_buttons()
+    
+    # Отрисовка предпросмотра здания
+    draw_building_preview(pygame.mouse.get_pos())
+    
+    # Отрисовка разделителей
+    pygame.draw.line(screen, DIVIDER_COLOR, 
+                    (LEFT_PANEL_WIDTH, 0), 
+                    (LEFT_PANEL_WIDTH, REMAINING_HEIGHT), 3)
+    pygame.draw.line(screen, DIVIDER_COLOR, 
+                    (0, REMAINING_HEIGHT), 
+                    (SCREEN_WIDTH, REMAINING_HEIGHT), 3)
+    
+    # Отрисовка ресурсов на нижней панели
+    draw_resources()
+
+def main():
+    """Главный игровой цикл"""
+    clock = pygame.time.Clock()
+    running = True
+    global selected_building
+    
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    selected_building = None  # Отмена строительства
+                elif event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS:
+                    global GRID_CELL_SIZE
+                    GRID_CELL_SIZE = min(100, GRID_CELL_SIZE + 5)
+                elif event.key == pygame.K_MINUS:
+                    GRID_CELL_SIZE = max(10, GRID_CELL_SIZE - 5)
+                # Тестовое изменение ресурсов
+                elif event.key == pygame.K_g:
+                    global gold
+                    gold += 100
+                elif event.key == pygame.K_p:
+                    global potions
+                    potions += 1
+                elif event.key == pygame.K_h:
+                    global population
+                    population += 1
+                elif event.key == pygame.K_l:
+                    global village_level
+                    village_level += 1
+            
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_pos = pygame.mouse.get_pos()
+                
+                # Клик в левой панели - выбор здания
+                if left_panel_rect.collidepoint(mouse_pos):
+                    for building_name, button_rect in building_buttons.items():
+                        if button_rect.collidepoint(mouse_pos) and can_afford_building(building_name):
+                            selected_building = building_name
+                
+                # Клик в правой панели - строительство
+                elif (right_panel_rect.collidepoint(mouse_pos) and selected_building):
+                    grid_x = (mouse_pos[0] - right_panel_rect.left) // GRID_CELL_SIZE
+                    grid_y = (mouse_pos[1] - right_panel_rect.top) // GRID_CELL_SIZE
+                    
+                    width, height = BUILDING_SIZES[selected_building]
+                    
+                    # Проверяем, что здание помещается
+                    if (grid_x + width <= (right_panel_rect.width // GRID_CELL_SIZE) and
+                        grid_y + height <= (right_panel_rect.height // GRID_CELL_SIZE)):
+                        
+                        if build_building(selected_building, grid_x, grid_y):
+                            selected_building = None  # Сброс после успешной постройки
+        
+        # Отрисовка интерфейса
+        draw_interface()
+        
+        # Отображение информации о сетке
+        grid_info = font.render(f"Размер клетки: {GRID_CELL_SIZE}px", True, (200, 200, 200))
+        help_text = small_font.render("Тест: G-золото, P-зелья, H-жители, L-уровень, ESC-отмена", True, (150, 150, 150))
+        
+        screen.blit(grid_info, (LEFT_PANEL_WIDTH + 50, 70))
+        screen.blit(help_text, (LEFT_PANEL_WIDTH + 50, 110))
+        
+        # Обновление экрана
+        pygame.display.flip()
+        clock.tick(60)  # 60 FPS
+    
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
+
+Новые возможности:
+🏗️ Система строительства:
+Левая панель: Кнопка "Ратуша" с информацией о стоимости и размере
+Выбор здания: Клик на кнопку в левой панели
+Предпросмотр: Полупрозрачная ратуша следует за курсором в правой панели
+Размещение: Клик для постройки ратуши размером 3x2 клетки
+
+📐 Характеристики ратуши:
+Размер: 3x2 клетки (6 клеток всего)
+Цвет: Бледно-оранжевый
+Стоимость: 500 золота + 2 зелья
+
+🎮 Управление:
+Клик на кнопку в левой панели - выбор ратуши
+Клик на сетку - постройка в выбранном месте
+ESC - отмена строительства
+G/P/H/L - тестовое добавление ресурсов
+
+📊 Улучшенная нижняя панель:
+Высота 90 пикселей вместо 30
+Крупный текст для лучшей читаемости
+Информация о режиме строительства
+Теперь можно строить ратуши на сетке, выбирая место и подтверждая постройку!

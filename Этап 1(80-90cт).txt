@@ -1,0 +1,111 @@
+Реализуй на питоне с пайгеймом создание окна будующей игры разделённого на 3 части
+тонкую полоску снизу, 1/3 оставшегося экрана слева и 2/3 справа
+
+import pygame
+import sys
+
+# Инициализация Pygame
+pygame.init()
+
+# Размеры окна
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 800
+
+# Создание окна
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Разделенное окно игры")
+
+# Цвета
+BACKGROUND = (30, 30, 40)  # Темно-синий фон
+DIVIDER_COLOR = (100, 100, 120)  # Цвет разделителей
+LEFT_PANEL_COLOR = (50, 60, 80)  # Цвет левой панели
+RIGHT_PANEL_COLOR = (40, 50, 70)  # Цвет правой панели
+BOTTOM_BAR_COLOR = (60, 70, 90)  # Цвет нижней полоски
+
+# Размеры областей
+BOTTOM_BAR_HEIGHT = 90  # Высота тонкой полоски снизу
+REMAINING_HEIGHT = SCREEN_HEIGHT - BOTTOM_BAR_HEIGHT
+LEFT_PANEL_WIDTH = REMAINING_HEIGHT // 3  # 1/3 оставшейся высоты для ширины левой панели
+RIGHT_PANEL_WIDTH = SCREEN_WIDTH - LEFT_PANEL_WIDTH
+
+# Определение прямоугольников для каждой области(х, у, ширина, высота)
+left_panel_rect = pygame.Rect(0, 0, LEFT_PANEL_WIDTH, REMAINING_HEIGHT)
+right_panel_rect = pygame.Rect(LEFT_PANEL_WIDTH, 0, RIGHT_PANEL_WIDTH, REMAINING_HEIGHT)
+bottom_bar_rect = pygame.Rect(0, REMAINING_HEIGHT, SCREEN_WIDTH, BOTTOM_BAR_HEIGHT)
+
+# Создание объекта шрифта(шрифт по умолчанию, размер ш в пикселях)
+font = pygame.font.Font(None, 30)
+
+def draw_interface():
+    """Отрисовка интерфейса с тремя областями"""
+    # Очистка экрана
+    screen.fill(BACKGROUND)
+    
+    # Отрисовка панелей
+    pygame.draw.rect(screen, LEFT_PANEL_COLOR, left_panel_rect)
+    pygame.draw.rect(screen, RIGHT_PANEL_COLOR, right_panel_rect)
+    pygame.draw.rect(screen, BOTTOM_BAR_COLOR, bottom_bar_rect)
+    
+    # Отрисовка разделителей
+    pygame.draw.line(screen, DIVIDER_COLOR, 
+                    (LEFT_PANEL_WIDTH, 0), # Начальная точка линии
+                    (LEFT_PANEL_WIDTH, REMAINING_HEIGHT), 2) # Конечная точка линии, толщина в пикселях 
+    pygame.draw.line(screen, DIVIDER_COLOR, 
+                    (0, REMAINING_HEIGHT), 
+                    (SCREEN_WIDTH, REMAINING_HEIGHT), 2)
+    
+    # Текст для идентификации областей
+    left_text = font.render("Левая панель (1/3)", True, (255, 255, 255))
+    right_text = font.render("Правая панель (2/3)", True, (255, 255, 255))
+    bottom_text = font.render("Нижняя панель", True, (255, 255, 255))
+    
+    screen.blit(left_text, (LEFT_PANEL_WIDTH // 8, REMAINING_HEIGHT // 2)) # x, y координат(целочисленное деление)
+    screen.blit(right_text, (LEFT_PANEL_WIDTH + RIGHT_PANEL_WIDTH // 3, REMAINING_HEIGHT // 2))
+    screen.blit(bottom_text, (SCREEN_WIDTH // 3, REMAINING_HEIGHT + 5))
+
+def main():
+    """Главный игровой цикл"""
+    clock = pygame.time.Clock() # Создает объект для управления временем и FPS 
+    running = True
+    
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+        
+        # Отрисовка интерфейса
+        draw_interface()
+        
+        # Обновление экрана
+        pygame.display.flip()
+        clock.tick(60)  # 60 FPS
+    
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
+
+Особенности реализации:
+Три области:
+Левая панель: Ширина = 1/3 от оставшейся высоты экрана
+Правая панель: Занимает оставшееся пространство
+Нижняя полоска: Фиксированная высота 30 пикселей
+
+Визуальное оформление:
+Разные цвета для каждой области
+Тонкие разделители между областями
+Текст для идентификации панелей
+
+Управление:
+Закрытие окна крестиком
+Выход по клавише ESC
+
+Для настройки под свои нужды:
+Измени SCREEN_WIDTH и SCREEN_HEIGHT для другого размера окна
+Настрой цвета через константы в начале кода
+Измени BOTTOM_BAR_HEIGHT для другой высоты нижней панели
+Добавь свой функционал в каждую из областей

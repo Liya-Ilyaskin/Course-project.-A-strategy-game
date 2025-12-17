@@ -1,0 +1,137 @@
+Самая большая часть должна быть в клеточку
+
+import pygame
+import sys
+
+# Инициализация Pygame
+pygame.init()
+
+# Размеры окна
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 800
+
+# Создание окна
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("Окно игры с сеткой")
+
+# Цвета
+BACKGROUND = (30, 30, 40)  # Темно-синий фон
+DIVIDER_COLOR = (100, 100, 120)  # Цвет разделителей
+LEFT_PANEL_COLOR = (50, 60, 80)  # Цвет левой панели
+RIGHT_PANEL_COLOR = (40, 50, 70)  # Цвет правой панели
+BOTTOM_BAR_COLOR = (60, 70, 90)  # Цвет нижней полоски
+GRID_COLOR = (80, 90, 110)  # Цвет сетки
+
+# Размеры областей
+BOTTOM_BAR_HEIGHT = 90  # Высота тонкой полоски снизу
+REMAINING_HEIGHT = SCREEN_HEIGHT - BOTTOM_BAR_HEIGHT
+LEFT_PANEL_WIDTH = REMAINING_HEIGHT // 3  # 1/3 оставшейся высоты для ширины левой панели
+RIGHT_PANEL_WIDTH = SCREEN_WIDTH - LEFT_PANEL_WIDTH
+
+# Параметры сетки для правой панели
+GRID_CELL_SIZE = 30  # Размер клетки в пикселях
+
+# Определение прямоугольников для каждой области
+left_panel_rect = pygame.Rect(0, 0, LEFT_PANEL_WIDTH, REMAINING_HEIGHT)
+right_panel_rect = pygame.Rect(LEFT_PANEL_WIDTH, 0, RIGHT_PANEL_WIDTH, REMAINING_HEIGHT)
+bottom_bar_rect = pygame.Rect(0, REMAINING_HEIGHT, SCREEN_WIDTH, BOTTOM_BAR_HEIGHT)
+
+# Создание объекта шрифта(шрифт по умолчанию, размер ш в пикселях)
+font = pygame.font.Font(None, 36)
+
+def draw_grid(surface, rect, cell_size, color):
+    """Отрисовка сетки в указанной области"""
+    start_x = rect.left
+    start_y = rect.top
+    end_x = rect.right
+    end_y = rect.bottom
+    
+    # Вертикальные линии
+    for x in range(start_x, end_x, cell_size):
+        pygame.draw.line(surface, color, (x, start_y), (x, end_y), 1)
+    
+    # Горизонтальные линии
+    for y in range(start_y, end_y, cell_size):
+        pygame.draw.line(surface, color, (start_x, y), (end_x, y), 1)
+
+def draw_interface():
+    """Отрисовка интерфейса с тремя областями"""
+    # Очистка экрана
+    screen.fill(BACKGROUND)
+    
+    # Отрисовка панелей
+    pygame.draw.rect(screen, LEFT_PANEL_COLOR, left_panel_rect)
+    pygame.draw.rect(screen, RIGHT_PANEL_COLOR, right_panel_rect)
+    pygame.draw.rect(screen, BOTTOM_BAR_COLOR, bottom_bar_rect)
+    
+    # Отрисовка сетки в правой панели
+    draw_grid(screen, right_panel_rect, GRID_CELL_SIZE, GRID_COLOR)
+    
+    # Отрисовка разделителей
+    pygame.draw.line(screen, DIVIDER_COLOR, 
+                    (LEFT_PANEL_WIDTH, 0),  # Начальная точка линии
+                    (LEFT_PANEL_WIDTH, REMAINING_HEIGHT), 2) # Конечная точка линии, толщина в пикселях 
+    pygame.draw.line(screen, DIVIDER_COLOR, 
+                    (0, REMAINING_HEIGHT), 
+                    (SCREEN_WIDTH, REMAINING_HEIGHT), 2)
+    
+    # Текст для идентификации областей
+    left_text = font.render("Левая панель (1/3)", True, (255, 255, 255))
+    right_text = font.render("Правая панель (2/3) - СЕТКА", True, (255, 255, 255))
+    bottom_text = font.render("Нижняя панель", True, (255, 255, 255))
+    
+    screen.blit(left_text, (LEFT_PANEL_WIDTH // 4, REMAINING_HEIGHT // 2))# x, y координат(целочисленное деление)
+    screen.blit(right_text, (LEFT_PANEL_WIDTH + 50, 30))
+    screen.blit(bottom_text, (SCREEN_WIDTH // 3, REMAINING_HEIGHT + 5))
+
+def main():
+    """Главный игровой цикл"""
+    clock = pygame.time.Clock() # Создает объект для управления временем и FPS 
+    running = True
+    
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                # Изменение размера сетки клавишами +/-
+                elif event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS:
+                    global GRID_CELL_SIZE
+                    GRID_CELL_SIZE = min(100, GRID_CELL_SIZE + 5)
+                elif event.key == pygame.K_MINUS:
+                    GRID_CELL_SIZE = max(10, GRID_CELL_SIZE - 5)
+        
+        # Отрисовка интерфейса
+        draw_interface()
+        
+        # Отображение размера сетки
+        grid_info = font.render(f"Размер клетки: {GRID_CELL_SIZE}px (+/-)", True, (200, 200, 200))
+        screen.blit(grid_info, (LEFT_PANEL_WIDTH + 50, 70))
+        
+        # Обновление экрана
+        pygame.display.flip()
+        clock.tick(60)  # 60 FPS
+    
+    pygame.quit()
+    sys.exit()
+
+if __name__ == "__main__":
+    main()
+
+Новые возможности:
+Сетка в правой панели: Самая большая часть теперь имеет клетчатый фон
+
+Настраиваемый размер клеток:
+Нажми + для увеличения размера клеток
+Нажми - для уменьшения размера клеток
+
+Отображение информации: Показывает текущий размер клетки
+
+Дополнительные настройки:
+Измени размер клетки: поменяй значение GRID_CELL_SIZE
+Измени цвет сетки: поменяй GRID_COLOR
+Размеры окна: настрой SCREEN_WIDTH и SCREEN_HEIGHT
+
+Теперь правая самая большая часть выглядит как клетчатое поле, идеальное для игр с сеткой (шахматы, крестики-нолики, стратегии и т.д.)!
